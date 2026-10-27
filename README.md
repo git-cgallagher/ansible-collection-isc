@@ -1,5 +1,7 @@
 # kea_dhcp — Ansible role for ISC Kea DHCP
 
+[![CI](https://github.com/git-cgallagher/ansible-role-kea-dhcp/actions/workflows/ci.yml/badge.svg)](https://github.com/git-cgallagher/ansible-role-kea-dhcp/actions/workflows/ci.yml)
+
 Deploys [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS in one of two ways:
 
 - **Packages**: installs Kea on Alpine (OpenRC), Debian/Ubuntu or the RHEL family/Fedora (systemd), with ISC's repositories, your own mirrors, or the distro's packages.
@@ -184,7 +186,7 @@ The full, typed list is in [`meta/argument_specs.yml`](meta/argument_specs.yml) 
 
 ## Testing
 
-You need the following installed:
+CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. To run the same checks locally, you need the following installed:
 
 - **`tests/run.sh`**: `ansible-core`, `kubernetes.core`, PyYAML, `openssl` and Docker. On Apple silicon, Docker also needs amd64 emulation.
 - **Molecule**: `molecule`, `molecule-plugins[docker]`, the `docker` Python SDK and the `community.docker` collection.
