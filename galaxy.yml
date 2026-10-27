@@ -29,5 +29,6 @@ build_ignore:
   - tests/output
   - '*.tar.gz'
   - .ansible-lint
+  - .gitignore
   - .yamllint
   - AGENTS.md
