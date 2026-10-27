@@ -1,0 +1,129 @@
+{#- Renders Dhcp4 or Dhcp6. Inputs: _family (4|6), _peers, _this_name,
+    _ha_self_url_any (bool), _control_address, _ip_key ('address'|'cluster_ip').
+    Built as a dict and emitted with to_nice_json so the output is always
+    valid JSON regardless of what the inventory contains. -#}
+{%- set v = _family | string -%}
+{%- set top = 'Dhcp' ~ v -%}
+{%- set ctrl_port = kea_dhcp4_control_port if v == '4' else kea_dhcp6_control_port -%}
+{%- set ha_port = kea_ha_dhcp4_port if v == '4' else kea_ha_dhcp6_port -%}
+
+{%- set http_socket = {
+      'socket-type': 'https' if kea_control_tls else 'http',
+      'socket-address': _control_address,
+      'socket-port': ctrl_port | int } -%}
+{%- if kea_control_tls -%}
+{%-   set _ = http_socket.update({
+        'trust-anchor': kea_control_tls.trust_anchor,
+        'cert-file': kea_control_tls.cert_file,
+        'key-file': kea_control_tls.key_file,
+        'cert-required': kea_control_tls.cert_required | default(true) }) -%}
+{%- endif -%}
+
+{%- set hooks = [] -%}
+{%- if (kea_ha_enabled | bool) -%}
+{%-   set peers = [] -%}
+{%-   for p in _peers -%}
+{%-     set host = p[_ip_key] | string -%}
+{%-     if p.name == _this_name and _ha_self_url_any -%}
+{%-       set host = '0.0.0.0' if v == '4' or ':' not in (p[_ip_key] | string) else '[::]' -%}
+{%-     elif ':' in host -%}
+{%-       set host = '[' ~ host ~ ']' -%}
+{%-     endif -%}
+{%-     set peer = {
+          'name': p.name,
+          'url': ('https' if kea_ha_tls else 'http') ~ '://' ~ host ~ ':' ~ ha_port ~ '/',
+          'role': p.role,
+          'auto-failover': p.auto_failover | default(kea_ha_auto_failover) | bool } -%}
+{%-     set _ = peers.append(peer) -%}
+{%-   endfor -%}
+{%-   set ha = {
+        'this-server-name': _this_name,
+        'mode': kea_ha_mode,
+        'max-response-delay': kea_ha_max_response_delay | int,
+        'max-ack-delay': kea_ha_max_ack_delay | int,
+        'multi-threading': {
+          'enable-multi-threading': kea_multi_threading | bool,
+          'http-dedicated-listener': kea_multi_threading | bool,
+          'http-listener-threads': 0,
+          'http-client-threads': 0 },
+        'peers': peers } -%}
+{#-   passive-backup rejects these three keys -#}
+{%-   if kea_ha_mode != 'passive-backup' -%}
+{%-     set _ = ha.update({
+          'heartbeat-delay': kea_ha_heartbeat_delay | int,
+          'max-unacked-clients': kea_ha_max_unacked_clients | int,
+          'max-rejected-lease-updates': kea_ha_max_rejected_lease_updates | int }) -%}
+{%-   endif -%}
+{%-   if kea_ha_mode == 'load-balancing' and kea_ha_delayed_updates_limit | int > 0 -%}
+{%-     set _ = ha.update({'delayed-updates-limit': kea_ha_delayed_updates_limit | int}) -%}
+{%-   endif -%}
+{%-   if kea_ha_tls -%}
+{%-     set _ = ha.update({
+          'trust-anchor': kea_ha_tls.trust_anchor,
+          'cert-file': kea_ha_tls.cert_file,
+          'key-file': kea_ha_tls.key_file,
+          'require-client-certs': kea_ha_tls.require_client_certs | default(true) }) -%}
+{%-   endif -%}
+{#-   lease_cmds MUST load before ha -#}
+{%-   set _ = hooks.append({'library': _kea_hook_lease_cmds}) -%}
+{%-   set _ = hooks.append({'library': _kea_hook_ha, 'parameters': {'high-availability': [ha]}}) -%}
+{%- endif -%}
+{%- for h in kea_extra_hooks -%}{%- set _ = hooks.append(h) -%}{%- endfor -%}
+
+{%- if kea_lease_backend == 'memfile' -%}
+{%-   set leasedb = {'type': 'memfile', 'persist': true,
+                     'name': '/var/lib/kea/kea-leases' ~ v ~ '.csv',
+                     'lfc-interval': kea_lease_lfc_interval | int} -%}
+{%- else -%}
+{%-   set leasedb = {'type': kea_lease_backend} -%}
+{%-   set _ = leasedb.update(kea_lease_db) -%}
+{%- endif -%}
+
+{%- set iface = {'interfaces': kea_interfaces} -%}
+{%- if v == '4' -%}{%- set _ = iface.update({'dhcp-socket-type': _dhcp4_socket_type}) -%}{%- endif -%}
+
+{%- set cfg = {
+      'interfaces-config': iface,
+      'control-sockets': [
+        {'socket-type': 'unix', 'socket-name': kea_control_unix_socket_dir ~ '/kea' ~ v ~ '-ctrl-socket'},
+        http_socket ],
+      'lease-database': leasedb,
+      'expired-leases-processing': {
+        'reclaim-timer-wait-time': 10, 'flush-reclaimed-timer-wait-time': 25,
+        'hold-reclaimed-time': 3600, 'max-reclaim-leases': 100,
+        'max-reclaim-time': 250, 'unwarned-reclaim-cycles': 5 },
+      'multi-threading': {
+        'enable-multi-threading': kea_multi_threading | bool,
+        'thread-pool-size': kea_thread_pool_size | int,
+        'packet-queue-size': kea_packet_queue_size | int },
+      'hooks-libraries': hooks,
+      'loggers': [{
+        'name': 'kea-dhcp' ~ v,
+        'output-options': [
+          {'output': 'stdout'} if kea_log_output == 'stdout'
+          else {'output': '/var/log/kea/kea-dhcp' ~ v ~ '.log', 'maxsize': 10485760, 'maxver': 8} ],
+        'severity': kea_log_severity }] } -%}
+
+{%- if v == '4' -%}
+{%-   set _ = cfg.update({
+        'valid-lifetime': kea_dhcp4_valid_lifetime | int,
+        'renew-timer': kea_dhcp4_renew_timer | int,
+        'rebind-timer': kea_dhcp4_rebind_timer | int,
+        'option-data': kea_dhcp4_option_data,
+        'reservations': kea_dhcp4_reservations,
+        'subnet4': kea_dhcp4_subnets }) -%}
+{%-   set extra = kea_dhcp4_extra -%}
+{%- else -%}
+{%-   set _ = cfg.update({
+        'preferred-lifetime': kea_dhcp6_preferred_lifetime | int,
+        'valid-lifetime': kea_dhcp6_valid_lifetime | int,
+        'renew-timer': kea_dhcp6_renew_timer | int,
+        'rebind-timer': kea_dhcp6_rebind_timer | int,
+        'option-data': kea_dhcp6_option_data,
+        'reservations': kea_dhcp6_reservations,
+        'subnet6': kea_dhcp6_subnets }) -%}
+{%-   set extra = kea_dhcp6_extra -%}
+{%- endif -%}
+{#- No // comment header: Stork parses these files too. Marker lives in user-context. -#}
+{%- set _ = cfg.update({'user-context': {'managed-by': 'ansible kea_stork role; local edits are overwritten'}}) -%}
+{{ {top: cfg | combine(extra, recursive=True)} | to_nice_json(indent=2) }}

@@ -1,0 +1,16 @@
+---
+- name: "Fetch signing key for {{ _repo }}"
+  ansible.builtin.get_url:
+    url: "{{ _kea_cloudsmith_repo_base }}/{{ _repo }}/gpg.key"
+    dest: "/etc/apt/keyrings/isc-{{ _repo }}.asc"
+    mode: "0644"
+
+- name: "Add apt source for {{ _repo }}"
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/isc-{{ _repo }}.asc]
+      {{ _kea_cloudsmith_repo_base }}/{{ _repo }}/deb/{{ ansible_facts['distribution'] | lower }}
+      {{ ansible_facts['distribution_release'] }} main
+    filename: "isc-{{ _repo }}"
+    state: present
+    update_cache: true

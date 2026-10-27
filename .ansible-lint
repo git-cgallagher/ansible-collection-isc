@@ -1,0 +1,9 @@
+---
+profile: production
+exclude_paths:
+  - collections/
+  - molecule/k8s/
+  - molecule/container/   # inventory, not a playbook
+  - .rendered/
+skip_list:
+  - var-naming[no-role-prefix]   # internal _kea_* facts are deliberately underscore-prefixed

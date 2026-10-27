@@ -1,0 +1,19 @@
+# Stork server image from ISC's Alpine packages (ISC publishes none).
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     --build-arg STORK_VERSION=2.6.0 -t <registry>/stork-server:2.6.0 \
+#     -f Dockerfile.stork-server --push .
+ARG ALPINE_VERSION=3.22
+FROM alpine:${ALPINE_VERSION}
+ARG ALPINE_VERSION
+ARG STORK_REPO=stork
+ARG STORK_VERSION=
+RUN set -eux; \
+    addgroup -S -g 65532 stork-server; \
+    adduser -S -D -H -u 65532 -G stork-server stork-server; \
+    key="$(wget -qO- "https://dl.cloudsmith.io/public/isc/${STORK_REPO}/setup.alpine.sh" | grep -oE 'rsa\.[0-9A-F]+\.key' | head -1)"; \
+    wget -qO "/etc/apk/keys/${STORK_REPO}@isc-$(echo "$key" | cut -d. -f2).rsa.pub" "https://dl.cloudsmith.io/public/isc/${STORK_REPO}/${key}"; \
+    echo "https://dl.cloudsmith.io/public/isc/${STORK_REPO}/alpine/v${ALPINE_VERSION}/main" >> /etc/apk/repositories; \
+    apk add --no-cache "isc-stork-server${STORK_VERSION:+~${STORK_VERSION}}"
+USER 65532:65532
+EXPOSE 8080/tcp
+CMD ["stork-server"]

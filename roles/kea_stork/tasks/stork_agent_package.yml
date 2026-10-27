@@ -1,0 +1,70 @@
+---
+- name: Install the Stork agent
+  ansible.builtin.package:
+    name: "isc-stork-agent{{ _ver }}"
+    state: present
+  vars:
+    _ver: >-
+      {{ '' if stork_version | length == 0
+         else {'deb': '=', 'rpm': '-', 'apk': '~'}[_kea_pkg_format] ~ stork_version ~ ('*' if _kea_pkg_format in ['deb', 'rpm'] else '') }}
+  notify: Restart stork agent
+
+# Stork discovers Kea by reading the process list and the config file named
+# on Kea's command line, then talks to the HTTP control socket in it. The
+# agent therefore needs read access to /etc/kea and /var/log/kea.
+- name: Let the Stork agent read Kea config and logs
+  ansible.builtin.user:
+    name: "{{ _stork_agent_user }}"
+    groups: "{{ _kea_group }}"
+    append: true
+  when: _kea_group != 'root'
+  notify: Restart stork agent
+
+- name: Write agent.env
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: /etc/stork/agent.env
+    owner: root
+    group: "{{ _stork_agent_user }}"
+    mode: "0640"
+  notify: Restart stork agent
+
+- name: Check whether the agent is already registered
+  ansible.builtin.stat:
+    path: /var/lib/stork-agent/root-cert.pem
+  register: _stork_agent_ca
+
+- name: Register the agent with the Stork server
+  ansible.builtin.command:
+    argv: >-
+      {{ ['stork-agent', 'register', '--non-interactive',
+          '--server-url', stork_server_url,
+          '--agent-host', stork_agent_address,
+          '--agent-port', stork_agent_port | string]
+         + (['--server-token', _token] if _token | length > 0 else [])
+         + (['--skip-tls-cert-verification'] if (stork_agent_skip_tls_verify | bool) else []) }}
+  vars:
+    _token: "{{ stork_server_token or (_stork_fetched_token | default('')) }}"
+  become: true
+  become_user: "{{ _stork_agent_user }}"
+  when: not _stork_agent_ca.stat.exists
+  register: _stork_register
+  changed_when: true
+  no_log: "{{ _token | length > 0 }}"
+  notify: Restart stork agent
+
+- name: Tell the operator the machine needs approval
+  ansible.builtin.debug:
+    msg: >-
+      Agent registered WITHOUT a server token: approve it in the Stork UI
+      under Services -> Machines -> Unauthorized. Compare the token with
+      /var/lib/stork-agent/tokens/agent-token.txt on {{ inventory_hostname }}.
+  when:
+    - _stork_register is changed
+    - (stork_server_token or (_stork_fetched_token | default(''))) | length == 0
+
+- name: Enable and start the Stork agent
+  ansible.builtin.service:
+    name: "{{ _stork_agent_service }}"
+    state: started
+    enabled: true

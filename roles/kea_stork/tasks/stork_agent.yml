@@ -1,0 +1,16 @@
+---
+- name: Fetch the Stork server token from the API
+  ansible.builtin.include_tasks: _stork_api_token.yml
+  when: stork_server_token | length == 0 and stork_admin_password | length > 0
+
+# The agent identifies Kea by running `kea-dhcp4 -v` from ITS OWN filesystem
+# (verified, Stork 2.6). When Kea runs in a container the host has no Kea
+# binary, so the agent must run from an image that bundles one
+# (files/Dockerfile.stork-agent) — even on distros that have ISC packages.
+- name: Stork agent from packages
+  ansible.builtin.include_tasks: stork_agent_package.yml
+  when: kea_deploy_mode == 'package'
+
+- name: Stork agent in a container
+  ansible.builtin.include_tasks: stork_agent_container.yml
+  when: kea_deploy_mode == 'container'

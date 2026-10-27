@@ -1,0 +1,39 @@
+# Stork agent image from ISC's Alpine packages (ISC publishes none).
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     --build-arg STORK_VERSION=2.6.0 --build-arg KEA_VERSION=3.0.4 \
+#     -t <registry>/stork-agent:2.6.0-kea3.0.4 -f Dockerfile.stork-agent --push .
+#
+# Kea binaries are installed too, ON PURPOSE: the agent identifies a daemon
+# by running `/usr/sbin/kea-dhcp4 -v` from its own filesystem. As a sidecar
+# without them it logs "Failed to detect Kea daemon(s) ... no such file".
+# Keep KEA_VERSION equal to the Kea image's version. These copies are never
+# run as servers, so their caps/permissions are relaxed (see below).
+#
+# Runs as root: it reads the other container's /proc entries (shared PID
+# namespace) and the Kea config, which in the Kea image is root-owned.
+ARG ALPINE_VERSION=3.22
+FROM alpine:${ALPINE_VERSION}
+ARG ALPINE_VERSION
+ARG STORK_REPO=stork
+ARG STORK_VERSION=
+ARG KEA_BRANCH=3-0
+ARG KEA_VERSION=
+RUN set -eux; \
+    for repo in "${STORK_REPO}" "kea-${KEA_BRANCH}"; do \
+      key="$(wget -qO- "https://dl.cloudsmith.io/public/isc/${repo}/setup.alpine.sh" | grep -oE 'rsa\.[0-9A-F]+\.key' | head -1)"; \
+      wget -qO "/etc/apk/keys/${repo}@isc-$(echo "$key" | cut -d. -f2).rsa.pub" "https://dl.cloudsmith.io/public/isc/${repo}/${key}"; \
+      echo "https://dl.cloudsmith.io/public/isc/${repo}/alpine/v${ALPINE_VERSION}/main" >> /etc/apk/repositories; \
+    done; \
+    kpin="${KEA_VERSION:+~${KEA_VERSION}}"; \
+    apk add --no-cache "isc-stork-agent${STORK_VERSION:+~${STORK_VERSION}}" \
+      "isc-kea-dhcp4${kpin}" "isc-kea-dhcp6${kpin}" "isc-kea-dhcp-ddns${kpin}"; \
+    # The packaged daemons are 0754 kea:kea with file caps
+    # (kea-dhcp4: cap_net_bind_service,cap_net_raw=ep). The agent only runs
+    # them with -v, so make them plain executables: then the sidecar needs
+    # no extra capabilities to exec them.
+    apk add --no-cache --virtual .setcap libcap-setcap; \
+    for b in /usr/sbin/kea-dhcp4 /usr/sbin/kea-dhcp6 /usr/sbin/kea-dhcp-ddns; do setcap -r "$b" 2>/dev/null || true; chmod 0755 "$b"; done; \
+    apk del .setcap; \
+    mkdir -p /var/lib/stork-agent
+EXPOSE 8080/tcp 9547/tcp
+CMD ["stork-agent"]

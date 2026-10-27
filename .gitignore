@@ -1,0 +1,4 @@
+collections/
+*.retry
+.vault-pass*
+.rendered/

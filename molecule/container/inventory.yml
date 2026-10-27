@@ -1,0 +1,20 @@
+# Container-mode test host (see docs/testing.md): a privileged systemd
+# Rocky 9 container with podman, joined to the molecule network, images
+# pre-loaded with `podman load`.
+kea:
+  hosts:
+    kea-ctr:
+      ansible_connection: community.docker.docker
+  vars:
+    kea_deploy_mode: container
+    kea_container_pull: false
+    kea_dhcp4_image: docker.io/local/kea:3.0.4
+    stork_agent_image: docker.io/local/stork-agent:2.6.0
+    kea_interfaces: [eth0]
+    kea_dhcp4_socket_type: udp
+    kea_dhcp4_subnets:
+      - { id: 1, subnet: 172.30.10.0/24, pools: [{ pool: 172.30.10.210 - 172.30.10.220 }] }
+    stork_server_url: http://172.30.10.20:8080
+    stork_api_url: http://127.0.0.1:18080
+    stork_admin_password: molecule-Admin-pw-1
+    stork_agent_address: 172.30.10.14

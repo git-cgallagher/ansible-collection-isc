@@ -1,0 +1,5 @@
+---
+kea_enabled: false
+stork_agent_enabled: false
+stork_server_enabled: true
+stork_db_install_local: true    # false + stork_db_host for RDS / external PG

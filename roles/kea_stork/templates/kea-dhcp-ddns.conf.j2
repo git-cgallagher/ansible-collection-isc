@@ -1,0 +1,8 @@
+{{ {'DhcpDdns': {
+      'ip-address': '127.0.0.1', 'port': 53001,
+      'user-context': {'managed-by': 'ansible kea_stork role'},
+      'control-sockets': [
+        {'socket-type': 'unix', 'socket-name': kea_control_unix_socket_dir ~ '/kea-ddns-ctrl-socket'},
+        {'socket-type': 'http', 'socket-address': _control_address, 'socket-port': kea_ddns_control_port | int}],
+      'loggers': [{'name': 'kea-dhcp-ddns', 'output-options': [{'output': 'stdout'}], 'severity': kea_log_severity}]
+    } | combine(kea_ddns_config, recursive=True) } | to_nice_json(indent=2) }}

@@ -1,0 +1,43 @@
+{% if (kea_k8s_network_policy | bool) and kea_k8s_exposure != 'hostnetwork' %}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kea
+  namespace: {{ kea_k8s_namespace }}
+  labels: {{ _kea_k8s_labels | to_json }}
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: kea }
+  policyTypes: [Ingress]
+  ingress:
+    # DHCP from relays (via the LB or in-cluster)
+    - ports:
+        - { protocol: UDP, port: 67 }
+        - { protocol: UDP, port: 547 }
+{% if (kea_ha_enabled | bool) %}
+    # HA heartbeats / lease updates: partners only
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: kea } }
+      ports:
+        - { protocol: TCP, port: {{ kea_ha_dhcp4_port }} }
+        - { protocol: TCP, port: {{ kea_ha_dhcp6_port }} }
+{% endif %}
+{% if (stork_agent_enabled | bool) %}
+    # Stork server -> agent, Prometheus -> exporter
+    - from:
+        - podSelector: { matchLabels: { app.kubernetes.io/name: stork-server } }
+{% for c in kea_k8s_monitoring_cidrs %}
+        - ipBlock: { cidr: {{ c }} }
+{% endfor %}
+      ports:
+        - { protocol: TCP, port: {{ stork_agent_port }} }
+        - { protocol: TCP, port: {{ stork_agent_prometheus_kea_port }} }
+{% endif %}
+{% if kea_k8s_profile == 'eks' and kea_k8s_exposure == 'loadbalancer' %}
+    # NLB TCP health checks come from the VPC
+    - from:
+        - ipBlock: { cidr: 0.0.0.0/0 }
+      ports:
+        - { protocol: TCP, port: {{ kea_ha_dhcp4_port if (kea_ha_enabled | bool) else stork_agent_port }} }
+{% endif %}
+{% endif %}

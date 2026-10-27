@@ -1,0 +1,303 @@
+---
+# =============================================================================
+# kea_stork — ISC Kea DHCP (optionally HA) + ISC Stork monitoring
+# =============================================================================
+# Every variable is prefixed `kea_` or `stork_`. Anything marked REQUIRED has
+# no safe default and is asserted in tasks/validate.yml.
+
+# -----------------------------------------------------------------------------
+# What to deploy, and how
+# -----------------------------------------------------------------------------
+# package    — native packages from ISC's Cloudsmith repos (Debian, Ubuntu,
+#              RHEL/Rocky/Alma/Oracle, Fedora, Amazon Linux 2023, Alpine)
+# container  — Kea in a container under podman/docker, driven by a systemd
+#              unit (any systemd distro that can run containers: Fedora
+#              CoreOS, Flatcar, minimal distros without ISC packages)
+# kubernetes — manifests applied with kubernetes.core.k8s (EKS, Talos, any
+#              conformant cluster). Runs from the control node; see
+#              docs/kubernetes.md.
+kea_deploy_mode: package
+
+kea_enabled: true            # install/configure Kea DHCP on this host
+stork_agent_enabled: true    # install the Stork agent next to Kea
+stork_server_enabled: false  # install the Stork server (normally on ONE host)
+
+# -----------------------------------------------------------------------------
+# Versions / repositories
+# -----------------------------------------------------------------------------
+# ISC Cloudsmith repo branch. "3-0" = LTS (EOL 2028-06), "3-2" = current
+# stable (EOL 2027-07). 2.x branches are EOL. 3.2 removed kea-ctrl-agent;
+# this role never uses the Control Agent, so both work.
+kea_branch: "3-0"
+# Pin an exact package version, e.g. "3.0.4". Empty = latest in the branch.
+kea_version: ""
+# Stork: "stork" repo carries stable releases (even minors: 2.4, 2.6);
+# "stork-dev" carries development releases (odd minors). Pin for prod.
+stork_repo: stork
+stork_version: ""
+
+kea_cloudsmith_base: https://dl.cloudsmith.io/public/isc
+# Paid subscribers (RBAC / config-backend hooks): set a Cloudsmith token and
+# the private repos (`-prv`) are used instead. Keep it in ansible-vault.
+kea_cloudsmith_token: ""
+
+# Amazon Linux 2023 has no log4cplus, which the EL9 RPMs need. When true the
+# role adds an EPEL 9 repo restricted to `log4cplus` only (includepkgs), which
+# is the minimum needed. Set false if you mirror log4cplus yourself.
+kea_al2023_epel_log4cplus: true
+
+# -----------------------------------------------------------------------------
+# Daemons
+# -----------------------------------------------------------------------------
+kea_dhcp4_enabled: true
+kea_dhcp6_enabled: false
+kea_ddns_enabled: false
+
+kea_service_state: started   # started | stopped
+kea_service_enabled: true
+
+# -----------------------------------------------------------------------------
+# Network
+# -----------------------------------------------------------------------------
+# Interfaces Kea listens on. "*" = all. For relayed-only deployments you can
+# list just the interface that faces the relays.
+kea_interfaces: ["*"]
+# raw  — needed to serve directly-attached (non-relayed) DHCPv4 clients.
+# udp  — relayed traffic only; no CAP_NET_RAW needed. Forced to udp on
+#        Kubernetes (pods never see L2 broadcasts).
+kea_dhcp4_socket_type: raw
+
+# -----------------------------------------------------------------------------
+# Control API (replaces kea-ctrl-agent). Stork talks to this.
+# -----------------------------------------------------------------------------
+kea_control_unix_socket_dir: /var/run/kea   # Kea 3.x rejects other dirs
+kea_control_http_address: 127.0.0.1         # keep local; Stork agent is co-located
+kea_dhcp4_control_port: 8004
+kea_dhcp6_control_port: 8006
+kea_ddns_control_port: 8053
+# Optional TLS for the control listeners (all three or none):
+# kea_control_tls: { trust_anchor: /etc/kea/tls/ca.pem, cert_file: ..., key_file: ..., cert_required: true }
+kea_control_tls: {}
+
+# -----------------------------------------------------------------------------
+# Lease storage
+# -----------------------------------------------------------------------------
+kea_lease_backend: memfile        # memfile | mysql | postgresql
+kea_lease_lfc_interval: 3600
+# For mysql/postgresql set kea_lease_db: { host, port, name, user, password }
+# (password -> vault). HA works with any backend; memfile is the ISC default
+# for HA because each peer keeps its own copy and HA syncs them.
+kea_lease_db: {}
+
+# -----------------------------------------------------------------------------
+# Performance
+# -----------------------------------------------------------------------------
+kea_multi_threading: true
+kea_thread_pool_size: 0   # 0 = auto (CPU count)
+kea_packet_queue_size: 64
+
+# -----------------------------------------------------------------------------
+# DHCPv4 / DHCPv6 content — passed through to Kea as-is (Kea JSON schema,
+# written as YAML). See examples/inventory/group_vars/kea.yml.
+# -----------------------------------------------------------------------------
+kea_dhcp4_valid_lifetime: 4000
+kea_dhcp4_renew_timer: 1000
+kea_dhcp4_rebind_timer: 2000
+kea_dhcp4_option_data: []
+kea_dhcp4_subnets: []        # list of subnet4 entries; each needs a unique `id`
+kea_dhcp4_reservations: []   # global reservations
+kea_dhcp4_extra: {}          # deep-merged into "Dhcp4" last (escape hatch)
+
+kea_dhcp6_preferred_lifetime: 3000
+kea_dhcp6_valid_lifetime: 4000
+kea_dhcp6_renew_timer: 1000
+kea_dhcp6_rebind_timer: 2000
+kea_dhcp6_option_data: []
+kea_dhcp6_subnets: []
+kea_dhcp6_reservations: []
+kea_dhcp6_extra: {}
+
+kea_ddns_config: {}          # whole "DhcpDdns" body when kea_ddns_enabled
+kea_extra_hooks: []          # extra hooks-libraries entries (both families)
+
+kea_log_severity: INFO
+# file -> /var/log/kea/<daemon>.log (Stork can show it); stdout for containers
+kea_log_output: "{{ 'stdout' if kea_deploy_mode != 'package' else 'file' }}"
+
+# -----------------------------------------------------------------------------
+# High availability (libdhcp_ha.so + libdhcp_lease_cmds.so)
+# -----------------------------------------------------------------------------
+kea_ha_enabled: false
+kea_ha_mode: hot-standby           # hot-standby | load-balancing | passive-backup
+# This server's peer name; must match one `name` in kea_ha_peers.
+kea_ha_this_server_name: "{{ inventory_hostname }}"
+# REQUIRED when HA is on. `address` MUST be an IP literal: Kea does not
+# resolve hostnames in HA URLs (by design, ISC kea#2775). Roles:
+#   hot-standby:    primary + standby (+ optional backups)
+#   load-balancing: primary + secondary (+ optional backups)
+#   passive-backup: one primary + backups
+# - { name: kea1, address: 10.0.0.11, role: primary }
+# - { name: kea2, address: 10.0.0.12, role: standby }
+kea_ha_peers: []
+# HA traffic runs on its own dedicated listener (HA+MT), separate from the
+# control API port. One port per daemon family.
+kea_ha_dhcp4_port: 8001
+kea_ha_dhcp6_port: 8002
+kea_ha_heartbeat_delay: 10000
+kea_ha_max_response_delay: 60000
+kea_ha_max_ack_delay: 5000
+kea_ha_max_unacked_clients: 5
+kea_ha_max_rejected_lease_updates: 10
+kea_ha_delayed_updates_limit: 0    # load-balancing only
+kea_ha_auto_failover: true
+# Strongly recommended outside a trusted L2: mutual TLS between peers.
+# { trust_anchor: /etc/kea/tls/ca.pem, cert_file: /etc/kea/tls/peer.pem,
+#   key_file: /etc/kea/tls/peer.key, require_client_certs: true }
+kea_ha_tls: {}
+# Copy these local files to the paths above (src = control-node path).
+# - { src: files/tls/ca.pem, dest: /etc/kea/tls/ca.pem, mode: "0644" }
+kea_tls_files: []
+
+# -----------------------------------------------------------------------------
+# Container mode (kea_deploy_mode: container) and Kubernetes image
+# -----------------------------------------------------------------------------
+kea_container_runtime: auto   # auto | podman | docker
+# ISC's image is amd64-only. For arm64 (Graviton, Raspberry Pi, ARM Talos)
+# build files/Dockerfile.kea (multi-arch, ISC Alpine packages) and point here.
+kea_image_registry: docker.cloudsmith.io/isc/docker
+kea_image_tag: "3.0.4"
+kea_dhcp4_image: "{{ kea_image_registry }}/kea-dhcp4:{{ kea_image_tag }}"
+kea_dhcp6_image: "{{ kea_image_registry }}/kea-dhcp6:{{ kea_image_tag }}"
+# ISC's Alpine packages install the daemons as 0754 kea:kea. With all
+# capabilities dropped, root can't exec them (no DAC_OVERRIDE), so the
+# container runs as uid 0 with this primary gid to use the group x-bit.
+# 101 in both ISC's image and files/Dockerfile.kea.
+kea_image_kea_gid: 101
+
+# -----------------------------------------------------------------------------
+# Stork agent
+# -----------------------------------------------------------------------------
+# REQUIRED when stork_agent_enabled: URL the agent registers with.
+stork_server_url: ""
+# Address the Stork server uses to reach this agent (IP or DNS).
+stork_agent_address: "{{ ansible_host | default(inventory_hostname) }}"
+stork_agent_port: 8080
+# Server token = unattended registration (no UI approval). Get it from the
+# Stork UI ("Installing Stork Agent on a New Machine") or let the role fetch
+# it with stork_admin_* below. Empty = agent-token registration: the machine
+# shows up under Services -> Machines -> Unauthorized for manual approval.
+stork_server_token: ""
+stork_agent_prometheus_kea_port: 9547
+stork_agent_prometheus_kea_per_subnet_stats: true
+stork_agent_skip_tls_verify: false
+stork_agent_extra_env: {}
+# Container and Kubernetes modes: no ISC image exists. Build
+# files/Dockerfile.stork-agent (bundles the Kea binaries the agent execs to
+# identify daemons) and set this.
+stork_agent_image: ""
+
+# -----------------------------------------------------------------------------
+# Stork server
+# -----------------------------------------------------------------------------
+stork_server_rest_host: 0.0.0.0
+stork_server_rest_port: 8080
+stork_server_tls: {}   # { cert: /etc/stork/tls/server.pem, key: ..., ca: ... }
+stork_server_enable_metrics: false   # /metrics has NO auth — firewall it
+stork_server_extra_env: {}
+
+# PostgreSQL. Stork needs PG >= 10 with the pgcrypto extension.
+# install_local: install PostgreSQL on the Stork host (lab / small sites).
+# false: point at an existing server (RDS, Cloud SQL, CloudNativePG, ...);
+#        the DB + user must already exist with pgcrypto available.
+stork_db_install_local: true
+stork_db_host: localhost
+stork_db_port: 5432
+stork_db_name: stork
+stork_db_user: stork
+stork_db_password: ""        # REQUIRED — use ansible-vault
+stork_db_sslmode: "{{ 'disable' if stork_db_install_local else 'require' }}"
+
+# Optional: let the role log in to the Stork API to read the server token for
+# agents (and change the bootstrap admin password). Leave empty to skip.
+stork_admin_user: admin
+stork_admin_password: ""         # vault; current password
+stork_admin_bootstrap_password: admin   # Stork's first-boot default
+# URL the CONTROL NODE uses for those API calls (defaults to the agents' URL;
+# differs when the controller sits outside the agents' network).
+stork_api_url: "{{ stork_server_url }}"
+
+# Kubernetes-only Stork server image (no ISC image exists).
+stork_server_image: ""
+
+# -----------------------------------------------------------------------------
+# Kubernetes (kea_deploy_mode: kubernetes) — see docs/kubernetes.md
+# -----------------------------------------------------------------------------
+kea_k8s_profile: generic          # generic | eks | talos
+kea_k8s_namespace: dhcp
+kea_k8s_kubeconfig: "{{ lookup('env', 'KUBECONFIG') | default(omit, true) }}"
+kea_k8s_context: ""
+kea_k8s_state: present            # present | absent
+# Write rendered manifests here too (for GitOps/review). Empty = don't.
+kea_k8s_render_dir: ""
+# Apply with kubernetes.core.k8s. false = render only.
+kea_k8s_apply: true
+
+# Pinned ClusterIPs, one per HA peer, because Kea HA URLs must be IP literals
+# and pod IPs change. Must sit inside the cluster's service CIDR and be free.
+#   EKS default service CIDR: 10.100.0.0/16 or 172.20.0.0/16
+#   Talos default:            10.96.0.0/12
+# - { name: kea1, cluster_ip: 10.96.200.11, role: primary }
+# - { name: kea2, cluster_ip: 10.96.200.12, role: standby }
+kea_k8s_peers: []
+kea_k8s_single_replica_name: kea1   # used when kea_ha_enabled is false
+
+# How relay agents reach Kea:
+#   loadbalancer — Service type=LoadBalancer for UDP/67 (and 547)
+#   hostnetwork  — pods bind the node's interfaces (needs privileged PSA)
+#   none         — internal only (you wire it up yourself)
+kea_k8s_exposure: loadbalancer
+kea_k8s_lb_annotations: {}         # merged over the profile defaults
+kea_k8s_lb_source_ranges: []       # restrict who may send DHCP to the LB
+kea_k8s_lb_ips: {}                 # { kea1: 192.168.10.53 } — fixed LB IP per peer
+# Bare-metal LB implementation (talos/generic): metallb | cilium | none
+kea_k8s_lb_implementation: "{{ 'metallb' if kea_k8s_profile == 'talos' else 'none' }}"
+# Pod Security Admission level for the namespace. "" = computed: privileged
+# when hostNetwork or the Stork sidecar (needs SYS_PTRACE) is used, else
+# baseline. Talos enforces baseline cluster-wide by default.
+kea_k8s_pod_security: ""
+# NetworkPolicy limiting the HA / Stork / metrics ports. Needs a CNI that
+# enforces policy (EKS: VPC CNI with network policy on; Talos: Cilium/Calico
+# — the default Flannel does NOT enforce).
+kea_k8s_network_policy: true
+# Who may scrape :9547 and reach the agent on :8080 (Stork server).
+kea_k8s_monitoring_cidrs: []
+# Address the Stork server uses to reach each pod's agent. Default:
+# kea-<peer>.<ns>.svc.cluster.local (fine for an in-cluster Stork server).
+# An out-of-cluster Stork server needs routable addresses here.
+kea_k8s_stork_agent_addresses: {}
+kea_k8s_node_selector: {}
+kea_k8s_tolerations: []
+kea_k8s_resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { memory: 512Mi }
+# Lease + agent-cert storage: pvc | emptydir. HA peers resync leases from
+# each other, so emptydir is survivable for HA pairs; single servers want pvc.
+# Default: pvc on eks/generic, emptydir on talos (Talos ships no StorageClass).
+kea_k8s_lease_storage: "{{ 'emptydir' if kea_k8s_profile == 'talos' else 'pvc' }}"
+kea_k8s_storage_class: ""          # "" = cluster default
+kea_k8s_lease_storage_size: 1Gi
+kea_k8s_image_pull_secrets: []
+
+# Stork server in-cluster (optional). Needs stork_server_image and an
+# external PostgreSQL (stork_db_host). Agents in the pods register to it.
+kea_k8s_stork_server_enabled: false
+kea_k8s_stork_server_service_type: ClusterIP
+
+# Added: container-mode extras
+kea_ddns_image: "{{ kea_image_registry }}/kea-dhcp-ddns:{{ kea_image_tag }}"
+# Install podman when no runtime is found (container mode). Off by default:
+# minimal/immutable distros usually ship one and package names vary.
+kea_container_install_runtime: false
+# Pull images on every run. false = images are pre-loaded (air-gapped hosts,
+# `podman load`), and the role uses whatever is local.
+kea_container_pull: true

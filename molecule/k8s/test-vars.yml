@@ -1,0 +1,32 @@
+---
+# Live test against a throwaway k3s-in-docker cluster (see docs/testing.md).
+# Uses $KUBECONFIG. stork_db_host = the k3s node's InternalIP (PostgreSQL ran
+# in the node container's network namespace) — machine-specific.
+kea_deploy_mode: kubernetes
+kea_k8s_profile: talos          # PSA labels + emptydir leases; LB via k3s servicelb
+kea_k8s_lb_implementation: none
+kea_k8s_namespace: dhcp
+kea_k8s_render_dir: "{{ playbook_dir }}/../../.rendered"   # gitignored
+kea_ha_enabled: true
+kea_ha_mode: hot-standby
+kea_ha_heartbeat_delay: 2000
+kea_ha_max_response_delay: 10000
+kea_ha_max_unacked_clients: 0
+kea_k8s_peers:
+  - { name: kea1, cluster_ip: 10.43.200.11, role: primary }
+  - { name: kea2, cluster_ip: 10.43.200.12, role: standby }
+kea_dhcp4_image: local/kea:3.0.4
+kea_dhcp4_subnets:
+  - { id: 1, subnet: 192.0.2.0/24, pools: [{ pool: 192.0.2.100 - 192.0.2.200 }], relay: { ip-addresses: [192.0.2.1] } }
+stork_agent_enabled: true
+stork_agent_image: local/stork-agent:2.6.0
+stork_server_url: http://stork-server.dhcp.svc.cluster.local:8080
+kea_k8s_stork_server_enabled: true
+stork_server_image: local/stork-server:2.6.0
+stork_db_host: 172.17.0.3
+stork_db_password: k8s-db-pw
+stork_db_sslmode: disable
+# Control node reaches the in-cluster Stork API through a port-forward
+# (started by the test harness). Fresh Stork servers boot with admin/admin.
+stork_api_url: http://127.0.0.1:18081
+stork_admin_password: admin

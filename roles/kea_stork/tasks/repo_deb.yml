@@ -1,0 +1,16 @@
+---
+- name: Create apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add ISC Cloudsmith repositories (deb)
+  ansible.builtin.include_tasks: _repo_deb_one.yml
+  loop: "{{ _repos }}"
+  loop_control:
+    loop_var: _repo
+  vars:
+    _repos: >-
+      {{ ([_kea_repo_name] if ((kea_enabled | bool) and kea_deploy_mode == 'package') else [])
+         + ([stork_repo] if ((stork_agent_enabled | bool) or (stork_server_enabled | bool)) else []) }}

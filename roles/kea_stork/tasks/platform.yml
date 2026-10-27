@@ -1,0 +1,43 @@
+---
+- name: Load OS family vars
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Load distribution overrides
+  ansible.builtin.include_vars: "{{ item }}"
+  with_first_found:
+    - files: ["{{ ansible_facts['distribution'] }}.yml"]
+      skip: true
+
+- name: Check platform is supported
+  ansible.builtin.assert:
+    that: _kea_pkg_format is defined
+    fail_msg: >-
+      {{ ansible_facts['distribution'] }} has no ISC packages. Use
+      kea_deploy_mode=container (any systemd host with podman/docker).
+    quiet: true
+  when: kea_deploy_mode == 'package' or (stork_agent_enabled | bool) or (stork_server_enabled | bool)
+
+- name: Derive RPM repo coordinates
+  when: _kea_pkg_format | default('') == 'rpm'
+  ansible.builtin.set_fact:
+    _kea_rpm_distro: "{{ _kea_rpm_distro | default('fedora' if ansible_facts['distribution'] == 'Fedora' else 'el') }}"
+    _kea_rpm_release: >-
+      {{ _kea_rpm_release | default(ansible_facts['distribution_version']
+         if ansible_facts['distribution'] == 'Fedora'
+         else ansible_facts['distribution_major_version']) }}
+    # EL needs EPEL for log4cplus; Fedora ships it.
+    _kea_epel_release: >-
+      {{ _kea_epel_release | default('' if ansible_facts['distribution'] == 'Fedora'
+         else ansible_facts['distribution_major_version']) }}
+
+- name: Refresh the apt cache (fresh/minimal images ship without one)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: _kea_pkg_format | default('') == 'deb'
+
+- name: Install prerequisite packages (separate transaction — see vars/RedHat.yml)
+  ansible.builtin.package:
+    name: "{{ _kea_prereq_packages }}"
+    state: present
+  when: _kea_prereq_packages is defined

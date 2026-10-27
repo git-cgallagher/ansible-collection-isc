@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ kea_k8s_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: ansible-kea_stork
+    # Talos enforces "baseline" cluster-wide by default; EKS enforces nothing.
+    # Setting it explicitly makes both behave the same.
+    pod-security.kubernetes.io/enforce: {{ _kea_k8s_psa }}
+    pod-security.kubernetes.io/warn: {{ _kea_k8s_psa }}
+    pod-security.kubernetes.io/audit: {{ _kea_k8s_psa }}

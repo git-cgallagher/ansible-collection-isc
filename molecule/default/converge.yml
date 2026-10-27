@@ -1,0 +1,11 @@
+---
+# Stork server first, so agents can fetch the server token and register.
+- name: Stork server
+  hosts: stork_server
+  become: true
+  roles: [kea_stork]
+
+- name: Kea HA peers + Stork agents
+  hosts: kea
+  become: true
+  roles: [kea_stork]
