@@ -1,0 +1,66 @@
+---
+- name: Enable EPEL for log4cplus
+  when:
+    - kea_dhcp_epel_manage | bool
+    - ansible_facts['distribution'] != 'Fedora'
+    - kea_dhcp_package_source != 'none'
+  block:
+    - name: Import the EPEL signing key on RHEL
+      ansible.builtin.rpm_key:
+        key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}"
+        state: present
+      when:
+        - ansible_facts['distribution'] == 'RedHat'
+        - kea_dhcp_epel_package | length == 0
+
+    - name: Install the EPEL release package
+      ansible.builtin.dnf:
+        name: >-
+          {{ kea_dhcp_epel_package if kea_dhcp_epel_package | length > 0 else
+             ('https://dl.fedoraproject.org/pub/epel/epel-release-latest-' ~ ansible_facts['distribution_major_version'] ~ '.noarch.rpm'
+              if ansible_facts['distribution'] == 'RedHat' else 'epel-release') }}
+        state: present
+
+- name: Import the ISC Kea repository signing key
+  ansible.builtin.rpm_key:
+    key: "{{ kea_dhcp__isc_repo_url }}/gpg.key"
+    state: present
+  when: kea_dhcp_isc_repo_manage | bool
+  no_log: "{{ kea_dhcp_isc_repo_token | length > 0 }}"
+
+- name: Configure the ISC Kea yum repositories
+  ansible.builtin.yum_repository:
+    name: "isc-{{ kea_dhcp__isc_repo_name }}{{ kea_dhcp_arch.suffix }}"
+    description: "ISC Kea {{ kea_dhcp_version_series }}{{ kea_dhcp_arch.suffix }}"
+    baseurl: >-
+      {{ kea_dhcp__isc_repo_url }}/rpm/{{ 'fedora' if ansible_facts['distribution'] == 'Fedora' else 'el' }}/{{
+      ansible_facts['distribution_major_version'] }}/{{ kea_dhcp_arch.path }}
+    gpgkey: "{{ kea_dhcp__isc_repo_url }}/gpg.key"
+    gpgcheck: true
+    repo_gpgcheck: true
+    skip_if_unavailable: true
+    mode: "0644"
+  loop:
+    - {suffix: "", path: "$basearch"}
+    - {suffix: "-noarch", path: noarch}
+  loop_control:
+    loop_var: kea_dhcp_arch
+    label: "{{ kea_dhcp_arch.path }}"
+  when: kea_dhcp_isc_repo_manage | bool
+  no_log: "{{ kea_dhcp_isc_repo_token | length > 0 }}"
+
+- name: Configure extra yum repositories
+  ansible.builtin.yum_repository:
+    name: "{{ kea_dhcp_repo.name }}"
+    description: "{{ kea_dhcp_repo.description | default(kea_dhcp_repo.name) }}"
+    baseurl: "{{ kea_dhcp_repo.baseurl }}"
+    gpgkey: "{{ kea_dhcp_repo.gpgkey | default(omit) }}"
+    gpgcheck: "{{ kea_dhcp_repo.gpgcheck | default(true) }}"
+    repo_gpgcheck: "{{ kea_dhcp_repo.repo_gpgcheck | default(false) }}"
+    enabled: "{{ kea_dhcp_repo.enabled | default(true) }}"
+    state: "{{ kea_dhcp_repo.state | default('present') }}"
+    mode: "0644"
+  loop: "{{ kea_dhcp_extra_repositories | selectattr('type', 'equalto', 'yum') }}"
+  loop_control:
+    loop_var: kea_dhcp_repo
+    label: "{{ kea_dhcp_repo.name }}"

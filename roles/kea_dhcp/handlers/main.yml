@@ -1,0 +1,51 @@
+---
+# Kea re-reads its config on SIGHUP, but a restart also reloads hook libraries
+# and HA peers cleanly, so the role restarts. Peers resync leases on start.
+
+- name: Restart Kea dhcp4
+  ansible.builtin.service:
+    name: "{{ kea_dhcp__services['dhcp4'] }}"
+    state: restarted
+  when:
+    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_manage_service | bool
+    - kea_dhcp_service_state != 'stopped'
+    - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
+    - "'dhcp4' in kea_dhcp__daemons"
+  listen: Restart Kea daemons
+
+- name: Restart Kea dhcp6
+  ansible.builtin.service:
+    name: "{{ kea_dhcp__services['dhcp6'] }}"
+    state: restarted
+  when:
+    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_manage_service | bool
+    - kea_dhcp_service_state != 'stopped'
+    - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
+    - "'dhcp6' in kea_dhcp__daemons"
+  listen: Restart Kea daemons
+
+- name: Restart Kea ddns
+  ansible.builtin.service:
+    name: "{{ kea_dhcp__services['ddns'] }}"
+    state: restarted
+  when:
+    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_manage_service | bool
+    - kea_dhcp_service_state != 'stopped'
+    - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
+    - "'ddns' in kea_dhcp__daemons"
+  listen: Restart Kea daemons
+
+- name: Restart Kea ctrl_agent
+  ansible.builtin.service:
+    name: "{{ kea_dhcp__services['ctrl_agent'] }}"
+    state: restarted
+  when:
+    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_manage_service | bool
+    - kea_dhcp_service_state != 'stopped'
+    - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
+    - "'ctrl_agent' in kea_dhcp__daemons"
+  listen: Restart Kea daemons

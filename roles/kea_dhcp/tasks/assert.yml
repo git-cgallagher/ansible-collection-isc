@@ -1,0 +1,121 @@
+---
+- name: Assert a supported Kea series and at least one DHCP family
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp_version_series is match('^[0-9]+\.[0-9]+$')
+      - kea_dhcp_version_series is version('2.6', '>=')
+      - kea_dhcp_dhcp4_enabled | bool or kea_dhcp_dhcp6_enabled | bool
+    fail_msg: >-
+      kea_dhcp_version_series must look like "3.0" and be >= 2.6, and at least
+      one of kea_dhcp_dhcp4_enabled / kea_dhcp_dhcp6_enabled must be true.
+    quiet: true
+
+- name: Assert the control agent is only requested where it exists
+  ansible.builtin.assert:
+    that:
+      - not (kea_dhcp_ctrl_agent_enabled | string | lower == 'true' and kea_dhcp__v3 | bool)
+    fail_msg: >-
+      kea-ctrl-agent is deprecated in Kea 3.0 and removed in 3.2. On 3.x set
+      kea_dhcp_api_http_enabled instead; each daemon serves its own HTTP API.
+    quiet: true
+
+- name: Assert the HTTP API is secured on Kea 3.2+
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp_version_series is version('3.2', '<')
+        or not kea_dhcp__api_http | bool
+        or kea_dhcp_api_tls | length > 0
+        or kea_dhcp_api_auth_clients | length > 0
+    fail_msg: >-
+      Kea 3.2 refuses an HTTP control socket with neither TLS nor authentication
+      ("Unsecured HTTP control channel"). Set kea_dhcp_api_auth_clients and/or
+      kea_dhcp_api_tls (non-dedicated-listener HA enables the API implicitly).
+    quiet: true
+
+- name: Assert interfaces are set for every enabled family
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp__service_mode | bool or not kea_dhcp_dhcp4_enabled | bool or kea_dhcp_dhcp4_interfaces | length > 0
+      - kea_dhcp__service_mode | bool or not kea_dhcp_dhcp6_enabled | bool or kea_dhcp_dhcp6_interfaces | length > 0
+    fail_msg: >-
+      Set kea_dhcp_interfaces (or kea_dhcp_dhcp4_interfaces / kea_dhcp_dhcp6_interfaces).
+      The role does not guess which NIC serves DHCP; use ["*"] for all.
+    quiet: true
+
+- name: Assert API auth clients are complete
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp_api_auth_clients | selectattr('user', 'undefined') | list | length == 0
+      - kea_dhcp_api_auth_clients | selectattr('password', 'undefined') | list | length == 0
+    fail_msg: Every kea_dhcp_api_auth_clients item needs `user` and `password`.
+    quiet: true
+  no_log: true
+
+- name: Assert high-availability topology
+  when: kea_dhcp_ha_enabled | bool
+  block:
+    - name: Assert this server is a peer in at least one relationship
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp__ha_relationships_all | map(attribute='peers') | flatten
+            | map(attribute='name') | select('equalto', kea_dhcp_ha_this_server_name) | list | length > 0
+          - kea_dhcp__ha_relationships_all | rejectattr('peers', 'defined') | list | length == 0
+          - kea_dhcp_ha_families | difference(kea_dhcp__families) | length == 0
+        fail_msg: >-
+          HA is enabled but "{{ kea_dhcp_ha_this_server_name }}" is not a peer in
+          kea_dhcp_ha_peers / kea_dhcp_ha_relationships, a relationship has no
+          peers, or kea_dhcp_ha_families lists a family this host does not serve.
+        quiet: true
+
+    - name: Assert each relationship has a valid mode and two or more peers
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp_rel.mode | default('') in ['hot-standby', 'load-balancing', 'passive-backup']
+          - kea_dhcp_rel.peers | length >= 2 or kea_dhcp_rel.mode == 'passive-backup'
+        fail_msg: >-
+          HA relationship modes are hot-standby, load-balancing or passive-backup;
+          active modes need a primary plus a secondary/standby peer.
+        quiet: true
+      loop: "{{ kea_dhcp__ha_relationships_all }}"
+      loop_control:
+        loop_var: kea_dhcp_rel
+        label: "{{ kea_dhcp_rel.mode | default('?') }}"
+
+- name: Assert Kubernetes topology requirements
+  when: kea_dhcp_deployment == 'kubernetes'
+  block:
+    - name: Assert shared_db uses an SQL lease backend and no HA hook
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp_dhcp4_lease_database.type | default('memfile') in ['mysql', 'postgresql']
+          - not kea_dhcp_dhcp6_enabled | bool or kea_dhcp_dhcp6_lease_database.type | default('memfile') in ['mysql', 'postgresql']
+          - not kea_dhcp_ha_enabled | bool
+        fail_msg: >-
+          kea_dhcp_k8s_topology=shared_db runs identical replicas against one
+          MySQL/PostgreSQL lease database; memfile and the HA hook are not valid there.
+        quiet: true
+      when: kea_dhcp_k8s_topology == 'shared_db'
+
+    - name: Assert host-network HA peers are pinned to a node
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp_k8s_node_name | length > 0
+        fail_msg: >-
+          With kea_dhcp_k8s_network_mode=host every HA peer must set
+          kea_dhcp_k8s_node_name: the peer URL is the node's IP and the lease
+          file lives on that node.
+        quiet: true
+      when:
+        - kea_dhcp_k8s_topology == 'ha_peers'
+        - kea_dhcp_k8s_network_mode == 'host'
+
+    - name: Assert memfile storage survives pod restarts
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp_k8s_storage_type != 'emptyDir'
+            or kea_dhcp_dhcp4_lease_database.type | default('memfile') != 'memfile'
+            or kea_dhcp_ha_enabled | bool
+        fail_msg: >-
+          memfile leases on emptyDir are lost on every restart. Use hostPath or
+          pvc, an SQL backend, or HA (the peer resyncs leases on start).
+        quiet: true

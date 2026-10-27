@@ -1,0 +1,31 @@
+---
+# Kea HA pair on Talos: hostNetwork pods pinned to two nodes, serving the LAN
+# those nodes sit on directly (broadcast). Hosts here are logical instances;
+# nothing connects to them — the role talks to the cluster from localhost.
+all:
+  children:
+    kea_talos:
+      hosts:
+        kea-a: {kea_dhcp_k8s_node_name: talos-worker-1}
+        kea-b: {kea_dhcp_k8s_node_name: talos-worker-2}
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        kea_dhcp_deployment: kubernetes
+        kea_dhcp_k8s_platform: talos       # privileged PSA labels + hostPath leases
+        kea_dhcp_k8s_topology: ha_peers
+        kea_dhcp_k8s_network_mode: host
+        kea_dhcp_k8s_context: admin@homelab
+        # Talos NIC names come from the node (talosctl get links -n <node>).
+        kea_dhcp_interfaces: [enp1s0]
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_peers:
+          - {name: kea-a, role: primary}
+          - {name: kea-b, role: standby}
+        # HA addresses are read from each node's InternalIP automatically.
+        kea_dhcp_dhcp4_settings:
+          subnet4:
+            - id: 1
+              subnet: 10.10.0.0/24
+              pools: [{pool: 10.10.0.100 - 10.10.0.250}]
+              option-data: [{name: routers, data: 10.10.0.1}]

@@ -1,0 +1,18 @@
+{% if kea_dhcp_k8s_create_namespace | bool %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ kea_dhcp_k8s_namespace }}
+  labels: {{ kea_dhcp__k8s_ns_labels | to_json }}
+{% endif %}
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ kea_dhcp_k8s_name }}
+  namespace: {{ kea_dhcp_k8s_namespace }}
+  labels: {{ ({'app.kubernetes.io/name': 'kea-dhcp', 'app.kubernetes.io/managed-by': 'ansible'} | combine(kea_dhcp_k8s_labels)) | to_json }}
+  annotations: {{ kea_dhcp_k8s_service_account_annotations | to_json }}
+automountServiceAccountToken: false

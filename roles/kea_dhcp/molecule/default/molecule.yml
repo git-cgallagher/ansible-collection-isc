@@ -1,0 +1,78 @@
+---
+# Package-mode install test in plain containers (no init system), so services
+# are not started; every config is still checked with `kea-<daemon> -t` by the
+# role's template validation and again in verify.yml. ISC publishes amd64
+# packages/images; on Apple silicon these run under emulation.
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: kea-debian12
+    image: debian:12-slim
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+  - name: kea-ubuntu2404
+    image: ubuntu:24.04
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+  - name: kea-rocky9
+    image: rockylinux/rockylinux:9
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+  - name: kea-alpine-isc
+    image: alpine:3.20
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+  - name: kea-alpine-distro
+    image: alpine:3.22
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      kea-debian12:
+        kea_dhcp_version_series: "3.0"
+        kea_dhcp_dhcp6_enabled: true
+        kea_dhcp_ddns_enabled: true
+      kea-ubuntu2404:
+        # 2.6 (EOL) from ISC: exercises absolute paths + the control agent.
+        kea_dhcp_version_series: "2.6"
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_auth_clients: [{user: admin, password: molecule-only}]
+      kea-rocky9:
+        kea_dhcp_version_series: "3.2"
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_auth_clients: [{user: stork, password: molecule-only}]  # 3.2 requires auth or TLS
+        kea_dhcp_lease_cmds_enabled: true
+      kea-alpine-isc:
+        kea_dhcp_version_series: "3.0"
+        kea_dhcp_isc_repo_alpine_version: "3.20"
+      kea-alpine-distro:
+        # Alpine's own packages (2.6.x): hooks dir detected from `kea-dhcp4 -W`.
+        kea_dhcp_package_source: distro
+        kea_dhcp_version_series: "2.6"
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_address: 127.0.0.1
+        kea_dhcp_ha_peers:
+          - {name: kea-alpine-distro, role: primary}
+          - {name: partner, role: standby, url: "http://127.0.0.2:8001/"}
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - create
+    - converge
+    - idempotence
+    - verify
+    - destroy

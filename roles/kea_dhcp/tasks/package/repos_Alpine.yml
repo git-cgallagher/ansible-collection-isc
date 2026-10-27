@@ -1,0 +1,68 @@
+---
+# apk trusts a key only if its FILE NAME matches the name the index was signed
+# with: "<repo>@isc-<KEYID>.rsa.pub". The IDs live in
+# kea_dhcp_isc_repo_alpine_key_ids.
+- name: Assert the Alpine signing key ID is known for this series
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp__isc_repo_name in kea_dhcp_isc_repo_alpine_key_ids
+        or kea_dhcp__isc_repo_name | regex_replace('-prv$', '') in kea_dhcp_isc_repo_alpine_key_ids
+    fail_msg: >-
+      Add the Cloudsmith RSA key ID for {{ kea_dhcp__isc_repo_name }} to
+      kea_dhcp_isc_repo_alpine_key_ids (see the repo's setup.alpine.sh).
+    quiet: true
+  when: kea_dhcp_isc_repo_manage | bool
+
+- name: Install the ISC Kea apk signing key
+  ansible.builtin.get_url:
+    url: "{{ kea_dhcp__isc_repo_url }}/rsa.{{ kea_dhcp__alpine_key_id }}.key"
+    dest: "/etc/apk/keys/{{ kea_dhcp__isc_repo_name }}@isc-{{ kea_dhcp__alpine_key_id }}.rsa.pub"
+    mode: "0644"
+  vars:
+    # Subscriber (-prv) repos sign with their own key: list "kea-3-0-prv" to
+    # override; otherwise the public repo's ID is tried.
+    kea_dhcp__alpine_key_id: >-
+      {{ kea_dhcp_isc_repo_alpine_key_ids[kea_dhcp__isc_repo_name]
+         | default(kea_dhcp_isc_repo_alpine_key_ids[kea_dhcp__isc_repo_name | regex_replace('-prv$', '')]) }}
+  when: kea_dhcp_isc_repo_manage | bool
+  no_log: "{{ kea_dhcp_isc_repo_token | length > 0 }}"
+
+- name: Configure the ISC Kea apk repository
+  ansible.builtin.lineinfile:
+    path: /etc/apk/repositories
+    line: "{{ kea_dhcp__isc_repo_url }}/alpine/v{{ kea_dhcp__alpine_branch }}/main"
+    regexp: "/isc/{{ kea_dhcp__isc_repo_name }}/alpine/"
+    state: present
+    mode: "0644"
+  vars:
+    kea_dhcp__alpine_branch: >-
+      {{ kea_dhcp_isc_repo_alpine_version if kea_dhcp_isc_repo_alpine_version | length > 0
+         else ansible_facts['distribution_version'].split('.')[:2] | join('.') }}
+  when: kea_dhcp_isc_repo_manage | bool
+  no_log: "{{ kea_dhcp_isc_repo_token | length > 0 }}"
+
+- name: Install signing keys for extra apk repositories
+  ansible.builtin.get_url:
+    url: "{{ kea_dhcp_repo.key_url }}"
+    dest: "/etc/apk/keys/{{ kea_dhcp_repo.key_name }}"
+    mode: "0644"
+  loop: "{{ kea_dhcp_extra_repositories | selectattr('type', 'equalto', 'apk') | selectattr('key_url', 'defined') }}"
+  loop_control:
+    loop_var: kea_dhcp_repo
+    label: "{{ kea_dhcp_repo.url }}"
+
+- name: Configure extra apk repositories
+  ansible.builtin.lineinfile:
+    path: /etc/apk/repositories
+    line: "{{ kea_dhcp_repo.url }}"
+    state: "{{ kea_dhcp_repo.state | default('present') }}"
+    mode: "0644"
+  loop: "{{ kea_dhcp_extra_repositories | selectattr('type', 'equalto', 'apk') }}"
+  loop_control:
+    loop_var: kea_dhcp_repo
+    label: "{{ kea_dhcp_repo.url }}"
+
+- name: Refresh the apk index
+  community.general.apk:
+    update_cache: true
+  changed_when: false

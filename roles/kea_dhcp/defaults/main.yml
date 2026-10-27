@@ -1,0 +1,361 @@
+---
+# =============================================================================
+# kea_dhcp — defaults
+#
+# Everything here is overridable. Variables are grouped by concern; the full
+# typed contract lives in meta/argument_specs.yml and is enforced at runtime.
+# Kea's own configuration keys are passed through untouched (hyphenated, as in
+# the Kea ARM) wherever the role accepts a "settings" dict.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Deployment target
+# -----------------------------------------------------------------------------
+# package    — install Kea from OS packages on the inventory host (systemd/OpenRC)
+# kubernetes — render Kea configs into Secrets and apply Deployments/DaemonSets to
+#              a cluster from the controller (Talos, EKS or any conformant cluster)
+kea_dhcp_deployment: package
+
+# Kea release series. Drives the ISC repository, config dialect (3.x direct
+# HTTP control sockets + bare filenames vs 2.6 control agent + absolute paths)
+# and the default container image tag. 3.0 is the LTS line; 3.2 is current
+# stable; 2.6 is end-of-life and supported only for existing estates.
+kea_dhcp_version_series: "3.0"
+
+# Which Kea daemons this host runs.
+kea_dhcp_dhcp4_enabled: true
+kea_dhcp_dhcp6_enabled: false
+kea_dhcp_ddns_enabled: false
+# Control Agent (2.6 only; deprecated in 3.0, removed in 3.2).
+# auto = enabled on 2.6 when the HTTP API or a non-dedicated-listener HA setup needs it.
+kea_dhcp_ctrl_agent_enabled: auto
+
+# -----------------------------------------------------------------------------
+# Package installation (kea_dhcp_deployment: package)
+# -----------------------------------------------------------------------------
+# isc    — ISC's Cloudsmith repositories (isc-kea-* packages, current releases)
+# distro — packages shipped by the OS (version varies: Alpine 3.22 = 2.6.x)
+# none   — do not manage packages; install them yourself (custom repo/build)
+kea_dhcp_package_source: isc
+kea_dhcp_package_state: present
+# Packages installed before repositories are configured. Empty = OS default
+# (ca-certificates, which slim images lack and HTTPS repos need).
+kea_dhcp_prerequisite_packages: []
+# Extra packages to install alongside Kea (e.g. isc-kea-perfdhcp).
+kea_dhcp_packages_extra: []
+# Override the computed package list entirely (empty = computed).
+kea_dhcp_packages_override: []
+
+# Manage the ISC repository for kea_dhcp_version_series.
+kea_dhcp_isc_repo_manage: "{{ kea_dhcp_package_source == 'isc' }}"
+kea_dhcp_isc_repo_base_url: https://dl.cloudsmith.io/public/isc
+# Private/subscriber repos: set a token; the role switches the URL and repo
+# name (kea-3-0 -> kea-3-0-prv). Prefer an Ansible Vault value.
+kea_dhcp_isc_repo_token: ""
+# Alpine signing-key IDs per ISC repo. apk matches keys by FILE NAME, so the
+# key must be saved as "<repo>@isc-<ID>.rsa.pub". Add entries for new series.
+kea_dhcp_isc_repo_alpine_key_ids:
+  kea-2-6: 72C2476D9C1A0ADE
+  kea-3-0: F10F3BFBD3D43C83
+  kea-3-2: F66DAF918F7CAEB6
+# Alpine branch in the ISC repo URL; empty = the host's release. Cloudsmith may
+# lag new Alpine releases, so pin it if needed (e.g. "3.20").
+kea_dhcp_isc_repo_alpine_version: ""
+
+# EL (RHEL/Rocky/Alma/...): Kea's RPMs, ISC's and the distro's alike, need
+# log4cplus from EPEL. Not used on Fedora. Set false if EPEL is mirrored
+# elsewhere (add it via kea_dhcp_extra_repositories).
+kea_dhcp_epel_manage: true
+# Empty = "epel-release" (Rocky/Alma/CentOS Stream), or the release RPM URL on RHEL.
+kea_dhcp_epel_package: ""
+
+# Arbitrary additional repositories, e.g. an internal mirror. Each item:
+#   apt: {type: apt, name, uris, suites, components, signed_by}  (deb822)
+#   yum: {type: yum, name, baseurl, gpgkey, gpgcheck, repo_gpgcheck, description}
+#   apk: {type: apk, url, key_url, key_name}
+# Optional on any item: state (present|absent).
+kea_dhcp_extra_repositories: []
+
+# Install python3 with a raw command before fact gathering (minimal images such
+# as Alpine without Python). Requires `gather_facts: false` in the play.
+kea_dhcp_bootstrap_python: false
+
+# Service handling. service_manager: auto | systemd | openrc | none
+kea_dhcp_manage_service: true
+kea_dhcp_service_manager: auto
+kea_dhcp_service_enabled: true
+kea_dhcp_service_state: started
+# Override service unit/script names: {dhcp4: ..., dhcp6: ..., ddns: ..., ctrl_agent: ...}
+kea_dhcp_service_names: {}
+# Run `kea-<daemon> -t` against rendered configs before installing them.
+kea_dhcp_validate_config: true
+
+# Filesystem layout. Kea 3.x (and 2.6.3+ via security backports) only accepts
+# lease/log/socket files inside its compiled-in directories: unix sockets must
+# live in /var/run/kea (the literal path — /run/kea is rejected even though it
+# is the same directory).
+kea_dhcp_config_dir: /etc/kea
+kea_dhcp_run_dir: /var/run/kea
+kea_dhcp_data_dir: /var/lib/kea
+# Hooks directory; empty = detect from `kea-dhcp4 -W` (package) or the image layout.
+kea_dhcp_hooks_dir: ""
+# Kea system user/group; empty = OS default (_kea on Debian ISC/distro, kea elsewhere).
+kea_dhcp_user: ""
+kea_dhcp_group: ""
+
+# Arbitrary files to place on the host (package) or mount into the pod
+# (kubernetes): TLS certs/keys, password files, scripts. Each item:
+#   {dest: /etc/kea/tls/ca.pem, content: "...", mode: "0640"}  or  {dest, src}
+# Content is never logged.
+kea_dhcp_files: []
+
+# -----------------------------------------------------------------------------
+# Interfaces and sockets
+# -----------------------------------------------------------------------------
+# No default: the role refuses to guess which NIC serves DHCP. Use "*" for all,
+# or "eth0/192.0.2.1" to bind one address. Per-family overrides below.
+kea_dhcp_interfaces: []
+kea_dhcp_dhcp4_interfaces: "{{ kea_dhcp_interfaces }}"
+kea_dhcp_dhcp6_interfaces: "{{ kea_dhcp_interfaces }}"
+# raw handles directly-connected (broadcast) clients; udp handles relayed traffic
+# only (the only option behind a Kubernetes Service / cloud load balancer).
+kea_dhcp_dhcp4_socket_type: raw
+
+# -----------------------------------------------------------------------------
+# Databases
+# -----------------------------------------------------------------------------
+# Kea lease-database object, passed through as-is. Examples:
+#   {type: memfile, lfc-interval: 3600}
+#   {type: postgresql, name: kea, host: db.example, user: kea, password: "{{ vault_kea_db }}"}
+# On 3.x the role auto-loads libdhcp_mysql.so / libdhcp_pgsql.so as required.
+kea_dhcp_lease_database:
+  type: memfile
+  lfc-interval: 3600
+kea_dhcp_dhcp4_lease_database: "{{ kea_dhcp_lease_database }}"
+kea_dhcp_dhcp6_lease_database: "{{ kea_dhcp_lease_database }}"
+# Host reservation backends (list of Kea database objects).
+kea_dhcp_hosts_databases: []
+
+# Configuration backend (shared config in MySQL/PostgreSQL across servers).
+kea_dhcp_config_backend:
+  enabled: false
+  server_tag: "{{ inventory_hostname }}"
+  config_databases: []
+  fetch_wait_time: 20
+
+# Initialise / upgrade the lease (and CB) schema with kea-admin. Runs once per
+# play against the first database it finds. Upgrade is opt-in.
+kea_dhcp_db_schema_manage: false
+kea_dhcp_db_schema_upgrade: false
+
+# -----------------------------------------------------------------------------
+# Control API
+# -----------------------------------------------------------------------------
+# UNIX control sockets (needed by kea-shell, Stork, the 2.6 control agent).
+kea_dhcp_unix_control_socket: true
+# HTTP(S) API. On 3.x each daemon listens itself; on 2.6 the control agent does.
+kea_dhcp_api_http_enabled: false
+kea_dhcp_api_http_address: 127.0.0.1
+kea_dhcp_api_ports:
+  dhcp4: 8000
+  dhcp6: 8010
+  ddns: 8020
+  ctrl_agent: 8000
+# TLS for the API: {trust-anchor, cert-file, key-file, cert-required} (Kea keys).
+kea_dhcp_api_tls: {}
+# Basic auth. Passwords are written to files in kea_dhcp_api_auth_dir, never inline.
+#   [{user: admin, password: "{{ vault_kea_api }}"}]
+kea_dhcp_api_auth_clients: []
+kea_dhcp_api_auth_realm: kea
+kea_dhcp_api_auth_dir: "{{ kea_dhcp_config_dir }}/api-creds"
+# Extra keys merged into every HTTP control socket (e.g. http-headers).
+kea_dhcp_api_http_extra: {}
+
+# -----------------------------------------------------------------------------
+# High availability (libdhcp_ha.so)
+# -----------------------------------------------------------------------------
+kea_dhcp_ha_enabled: false
+# Families HA applies to.
+kea_dhcp_ha_families: [dhcp4]
+# This server's name as it appears in peers[].name.
+kea_dhcp_ha_this_server_name: "{{ inventory_hostname }}"
+# Address peers use to reach this host (url host). Defaults to ansible_host;
+# on Kubernetes hostNetwork it is looked up from the node's InternalIP.
+kea_dhcp_ha_address: "{{ hostvars[inventory_hostname]['ansible_host'] | default(inventory_hostname) }}"
+# Dedicated HA listener ports (multi-threaded HA, the default).
+kea_dhcp_ha_ports:
+  dhcp4: 8001
+  dhcp6: 8011
+# HA over the HTTP API (dedicated listener off) authenticates as this API
+# client; empty = the first kea_dhcp_api_auth_clients entry.
+kea_dhcp_ha_api_auth_user: ""
+# url scheme when peers don't set one; https needs TLS keys (see kea_dhcp_ha_defaults).
+kea_dhcp_ha_scheme: http
+
+# Simple single-relationship form…
+kea_dhcp_ha_mode: hot-standby
+# [{name: kea1, role: primary}, {name: kea2, role: standby}]
+# Peer items accept every Kea peer key (url, auto-failover, basic-auth-*,
+# trust-anchor, ...) plus role-only helpers: `host` (inventory host to read
+# kea_dhcp_ha_address from) and `address`/`port` (build the url).
+kea_dhcp_ha_peers: []
+
+# …or the full form: a list of relationships (hub-and-spoke, Kea >= 2.6).
+# Each item is a Kea "high-availability" entry; `this-server-name` is filled in
+# and only relationships that include this server are rendered.
+#   - {mode: hot-standby, peers: [...]}
+#   - {mode: hot-standby, peers: [...]}
+kea_dhcp_ha_relationships: []
+
+# Keys merged into every relationship (heartbeat-delay, max-unacked-clients,
+# TLS, delayed-updates-limit, restrict-commands, ...).
+kea_dhcp_ha_defaults:
+  heartbeat-delay: 10000
+  max-response-delay: 60000
+  max-ack-delay: 5000
+  max-unacked-clients: 5
+  multi-threading:
+    enable-multi-threading: true
+    http-dedicated-listener: true
+    http-listener-threads: 0
+    http-client-threads: 0
+
+# -----------------------------------------------------------------------------
+# Daemon configuration (pass-through)
+# -----------------------------------------------------------------------------
+# These dicts are deep-merged LAST over what the role computes, so any Kea key
+# can be set or overridden: subnet4, shared-networks, option-data,
+# client-classes, reservations, valid-lifetime, multi-threading, ...
+kea_dhcp_dhcp4_settings: {}
+kea_dhcp_dhcp6_settings: {}
+kea_dhcp_ddns_settings: {}
+kea_dhcp_ctrl_agent_settings: {}
+
+# Extra hook libraries, appended after the role-managed ones.
+# [{library: libdhcp_host_cmds.so, parameters: {}}]  (bare name; path added on 2.6)
+kea_dhcp_dhcp4_hooks_libraries: []
+kea_dhcp_dhcp6_hooks_libraries: []
+kea_dhcp_ddns_hooks_libraries: []
+# Load libdhcp_lease_cmds.so even without HA (always loaded with HA).
+kea_dhcp_lease_cmds_enabled: false
+
+# Loggers (Kea format). Default: INFO to stdout (journald/OpenRC log/kubectl logs).
+kea_dhcp_log_output: stdout
+kea_dhcp_log_severity: INFO
+kea_dhcp_log_debuglevel: 0
+# Full override of the loggers list for every daemon (empty = computed).
+kea_dhcp_loggers: []
+
+# -----------------------------------------------------------------------------
+# Kubernetes (kea_dhcp_deployment: kubernetes)
+# -----------------------------------------------------------------------------
+# All k8s tasks run on the controller (delegate_to: localhost). Inventory hosts
+# are logical Kea instances; use `ansible_connection: local` for them.
+#
+# platform: talos | eks | generic — selects defaults below (PSA labels,
+# network mode, storage). Every derived value can still be overridden.
+kea_dhcp_k8s_platform: generic
+# ha_peers  — one Deployment per inventory host (an HA peer), pinned to a node
+# shared_db — one workload, N replicas sharing a MySQL/PostgreSQL lease DB,
+#             no HA hook. Use a single inventory host to describe it.
+kea_dhcp_k8s_topology: ha_peers
+# host    — hostNetwork + raw sockets: serves broadcast clients on the node's LAN
+#           (bare metal / Talos). Requires a privileged namespace.
+# service — pod network + UDP Service (LoadBalancer): relayed/unicast DHCP only
+#           (EKS: the VPC never delivers DHCP broadcasts to pods).
+kea_dhcp_k8s_network_mode: "{{ 'service' if kea_dhcp_k8s_platform == 'eks' else 'host' }}"
+
+# Empty = the kubernetes.core defaults (KUBECONFIG / ~/.kube/config, current context).
+kea_dhcp_k8s_kubeconfig: ""
+kea_dhcp_k8s_context: ""
+kea_dhcp_k8s_namespace: kea-dhcp
+kea_dhcp_k8s_create_namespace: true
+# Extra namespace labels. PSA "privileged" labels are added automatically for
+# host network mode / hostPath storage (required on Talos).
+kea_dhcp_k8s_namespace_labels: {}
+# present | absent (absent removes this role's objects, not the namespace)
+kea_dhcp_k8s_state: present
+# With state=absent, also delete the lease PVC (memfile lease history). Off by
+# default: removing a deployment should not silently destroy lease data.
+kea_dhcp_k8s_absent_delete_pvc: false
+# false = only render manifests (GitOps); set kea_dhcp_k8s_manifest_dir to keep them.
+kea_dhcp_k8s_apply: true
+kea_dhcp_k8s_manifest_dir: ""
+kea_dhcp_k8s_wait: true
+kea_dhcp_k8s_wait_timeout: 300
+# Base name for objects; instances become <name>-<inventory_hostname>.
+kea_dhcp_k8s_name: kea
+kea_dhcp_k8s_instance_name: "{{ kea_dhcp_k8s_name }}-{{ inventory_hostname | regex_replace('[^a-z0-9-]', '-') }}"
+kea_dhcp_k8s_labels: {}
+kea_dhcp_k8s_annotations: {}
+
+# Images. ISC publishes linux/amd64 only — hence the arch node selector below.
+kea_dhcp_k8s_image_registry: docker.cloudsmith.io/isc/docker
+kea_dhcp_k8s_image_tag: "{{ kea_dhcp__default_image_tags[kea_dhcp_version_series] | default(kea_dhcp_version_series) }}"
+kea_dhcp_k8s_images:
+  dhcp4: "{{ kea_dhcp_k8s_image_registry }}/kea-dhcp4:{{ kea_dhcp_k8s_image_tag }}"
+  dhcp6: "{{ kea_dhcp_k8s_image_registry }}/kea-dhcp6:{{ kea_dhcp_k8s_image_tag }}"
+  ddns: "{{ kea_dhcp_k8s_image_registry }}/kea-dhcp-ddns:{{ kea_dhcp_k8s_image_tag }}"
+  # 2.6 only: the kea-dhcp4 image also ships kea-ctrl-agent.
+  ctrl_agent: "{{ kea_dhcp_k8s_image_registry }}/kea-dhcp4:{{ kea_dhcp_k8s_image_tag }}"
+kea_dhcp_k8s_image_pull_policy: IfNotPresent
+kea_dhcp_k8s_image_pull_secrets: []  # [{name: regcred}]
+
+# Scheduling.
+# Node to pin this instance to (ha_peers + host mode: required).
+kea_dhcp_k8s_node_name: ""
+kea_dhcp_k8s_node_selector:
+  kubernetes.io/arch: amd64
+kea_dhcp_k8s_tolerations: []
+kea_dhcp_k8s_affinity: {}
+kea_dhcp_k8s_priority_class_name: ""
+# shared_db topology: replicas (service mode) or DaemonSet over selected nodes (host mode).
+kea_dhcp_k8s_replicas: 2
+
+# Lease/state persistence for memfile (ha_peers; shared_db keeps leases in SQL).
+# hostPath (Talos default), pvc (EKS default: EBS via the default StorageClass), emptyDir
+kea_dhcp_k8s_storage_type: "{{ kea_dhcp__k8s_platform_defaults[kea_dhcp_k8s_platform]['storage_type'] }}"
+kea_dhcp_k8s_host_path_base: /var/lib/kea-dhcp
+kea_dhcp_k8s_pvc_size: 1Gi
+kea_dhcp_k8s_pvc_storage_class: ""
+
+# Services (service network mode).
+kea_dhcp_k8s_service_type: LoadBalancer
+# EKS + AWS Load Balancer Controller example:
+#   service.beta.kubernetes.io/aws-load-balancer-type: external
+#   service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+#   service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+#   service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true
+# In-tree controller alternative: service.beta.kubernetes.io/aws-load-balancer-type: nlb
+kea_dhcp_k8s_service_annotations: {}
+kea_dhcp_k8s_load_balancer_class: ""
+kea_dhcp_k8s_load_balancer_source_ranges: []
+kea_dhcp_k8s_external_traffic_policy: Local
+# HA in service mode: peers talk over a per-instance ClusterIP Service. Kea needs
+# an IP (not a DNS name) in peer URLs; set a fixed clusterIP for GitOps renders,
+# otherwise it is read back after the Service is created.
+kea_dhcp_k8s_ha_cluster_ip: ""
+# host network mode: read this peer's HA address from the node's InternalIP
+# (needs kea_dhcp_k8s_apply). Otherwise kea_dhcp_ha_address is used.
+kea_dhcp_k8s_ha_address_from_node: true
+
+# Pod tuning.
+kea_dhcp_k8s_resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+kea_dhcp_k8s_service_account_annotations: {}  # e.g. eks.amazonaws.com/role-arn for IRSA
+kea_dhcp_k8s_pod_annotations: {}
+kea_dhcp_k8s_pod_labels: {}
+kea_dhcp_k8s_env: []
+kea_dhcp_k8s_extra_volumes: []
+kea_dhcp_k8s_extra_volume_mounts: []
+kea_dhcp_k8s_extra_containers: []
+# Linux capabilities for Kea containers (all others dropped). The ISC images run
+# as root but their binaries are owned by kea:kea (0754), so DAC_OVERRIDE is
+# required; NET_RAW for raw sockets, NET_BIND_SERVICE for ports 67/547.
+kea_dhcp_k8s_capabilities: [NET_RAW, NET_BIND_SERVICE, DAC_OVERRIDE]
+# Override probes per container ({} = computed: TCP on the HA listener or API port).
+kea_dhcp_k8s_probes: {}

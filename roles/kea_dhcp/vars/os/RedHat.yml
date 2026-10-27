@@ -1,0 +1,32 @@
+---
+# RHEL, Rocky, Alma, CentOS Stream, Fedora. ISC unit names verified against
+# isc-kea 3.0 el9 RPMs (/usr/lib/systemd/system/kea-dhcp4.service).
+kea_dhcp__os_user: kea
+# Installed before any repository is added (HTTPS repos need a CA bundle).
+kea_dhcp__os_prereqs: [ca-certificates]
+kea_dhcp__os_packages:
+  isc:
+    dhcp4: [isc-kea-dhcp4]
+    dhcp6: [isc-kea-dhcp6]
+    ddns: [isc-kea-dhcp-ddns]
+    ctrl_agent: [isc-kea-ctrl-agent]
+    hooks: [isc-kea-hooks]
+    mysql: [isc-kea-mysql]
+    postgresql: [isc-kea-pgsql]
+    admin: [isc-kea-admin]
+  distro:
+    dhcp4: [kea]
+    dhcp6: [kea]
+    ddns: [kea]
+    ctrl_agent: [kea]
+    hooks: [kea-hooks]
+    mysql: []
+    postgresql: []
+    admin: [kea]
+kea_dhcp__os_services:
+  isc: &kea_dhcp_rh_services
+    dhcp4: kea-dhcp4
+    dhcp6: kea-dhcp6
+    ddns: kea-dhcp-ddns
+    ctrl_agent: kea-ctrl-agent
+  distro: *kea_dhcp_rh_services

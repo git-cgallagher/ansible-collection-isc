@@ -1,0 +1,65 @@
+---
+- name: Create the API credentials directory
+  ansible.builtin.file:
+    path: "{{ kea_dhcp_api_auth_dir }}"
+    state: directory
+    owner: root
+    group: "{{ kea_dhcp__group }}"
+    mode: "0750"
+  when: kea_dhcp_api_auth_clients | length > 0
+
+# Kea 3.2 rejects a clear-text `user` in the config, so both the user name and
+# the password come from files (supported since 2.6).
+- name: Write API user files
+  ansible.builtin.copy:
+    content: "{{ kea_dhcp_client.user }}"
+    dest: "{{ kea_dhcp_api_auth_dir }}/{{ kea_dhcp_client.user }}.user"
+    owner: root
+    group: "{{ kea_dhcp__group }}"
+    mode: "0640"
+  loop: "{{ kea_dhcp_api_auth_clients }}"
+  loop_control:
+    loop_var: kea_dhcp_client
+    label: "{{ kea_dhcp_client.user }}"
+  no_log: true
+  notify: Restart Kea daemons
+
+- name: Write API password files
+  ansible.builtin.copy:
+    content: "{{ kea_dhcp_client.password }}"
+    dest: "{{ kea_dhcp_api_auth_dir }}/{{ kea_dhcp_client.user }}.password"
+    owner: root
+    group: "{{ kea_dhcp__group }}"
+    mode: "0640"
+  loop: "{{ kea_dhcp_api_auth_clients }}"
+  loop_control:
+    loop_var: kea_dhcp_client
+    label: "{{ kea_dhcp_client.user }}"
+  no_log: true
+  notify: Restart Kea daemons
+
+- name: Create parent directories for supporting files
+  ansible.builtin.file:
+    path: "{{ kea_dhcp_file_dir }}"
+    state: directory
+    owner: root
+    group: "{{ kea_dhcp__group }}"
+    mode: "0750"
+  loop: "{{ kea_dhcp_files | map(attribute='dest') | map('dirname') | unique }}"
+  loop_control:
+    loop_var: kea_dhcp_file_dir
+
+- name: Install supporting files
+  ansible.builtin.copy:
+    src: "{{ kea_dhcp_file.src | default(omit) }}"
+    content: "{{ kea_dhcp_file.content | default(omit) }}"
+    dest: "{{ kea_dhcp_file.dest }}"
+    owner: "{{ kea_dhcp_file.owner | default('root') }}"
+    group: "{{ kea_dhcp_file.group | default(kea_dhcp__group) }}"
+    mode: "{{ kea_dhcp_file.mode | default('0640') }}"
+  loop: "{{ kea_dhcp_files }}"
+  loop_control:
+    loop_var: kea_dhcp_file
+    label: "{{ kea_dhcp_file.dest }}"
+  no_log: true
+  notify: Restart Kea daemons

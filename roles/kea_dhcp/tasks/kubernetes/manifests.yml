@@ -1,0 +1,20 @@
+---
+# GitOps output: one multi-document file per instance. The Secret holds Kea
+# configs (and any DB/API passwords) in clear text — encrypt it (SOPS, Sealed
+# Secrets) before committing, or let the role apply it directly instead.
+- name: Create the manifest directory
+  ansible.builtin.file:
+    path: "{{ kea_dhcp_k8s_manifest_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Write instance manifests
+  ansible.builtin.copy:
+    content: |
+      {% for doc in kea_dhcp__k8s_manifests %}
+      ---
+      {{ doc | ansible.builtin.to_nice_yaml(indent=2, sort_keys=false) }}
+      {%- endfor %}
+    dest: "{{ kea_dhcp_k8s_manifest_dir }}/{{ kea_dhcp_k8s_instance_name }}.yaml"
+    mode: "0640"
+  no_log: true

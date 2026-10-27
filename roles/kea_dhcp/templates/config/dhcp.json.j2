@@ -1,0 +1,152 @@
+{#- Builds the Dhcp4 / Dhcp6 object as JSON. Rendered via lookup('template')
+    with kea_dhcp__family set to dhcp4 or dhcp6; tasks/config/build.yml wraps
+    and merges it. Role-computed keys first, user settings deep-merged last. -#}
+{%- import 'config/_macros.j2' as m with context -%}
+{%- set fam = kea_dhcp__family -%}
+{%- set ver = '4' if fam == 'dhcp4' else '6' -%}
+{%- set user = kea_dhcp_dhcp4_settings if fam == 'dhcp4' else kea_dhcp_dhcp6_settings -%}
+{%- set cfg = {} -%}
+
+{#- interfaces ---------------------------------------------------------- -#}
+{%- set ifaces = kea_dhcp_dhcp4_interfaces if fam == 'dhcp4' else kea_dhcp_dhcp6_interfaces -%}
+{%- if ifaces | length == 0 and kea_dhcp__service_mode | bool -%}
+{%-   set ifaces = ['*'] -%}
+{%- endif -%}
+{%- set ic = {'interfaces': ifaces} -%}
+{%- if fam == 'dhcp4' -%}
+{%-   set ic = ic | combine({'dhcp-socket-type': kea_dhcp__dhcp4_socket_type}) -%}
+{%- endif -%}
+{%- set cfg = cfg | combine({'interfaces-config': ic}) -%}
+
+{#- databases ----------------------------------------------------------- -#}
+{%- set cfg = cfg | combine({'lease-database': (kea_dhcp_dhcp4_lease_database if fam == 'dhcp4' else kea_dhcp_dhcp6_lease_database)}) -%}
+{%- if kea_dhcp_hosts_databases | length > 0 -%}
+{%-   set cfg = cfg | combine({'hosts-databases': kea_dhcp_hosts_databases}) -%}
+{%- endif -%}
+{%- if kea_dhcp_config_backend.enabled | default(false) | bool -%}
+{%-   set cfg = cfg | combine({
+        'server-tag': kea_dhcp_config_backend.server_tag | default(inventory_hostname),
+        'config-control': {
+          'config-databases': kea_dhcp_config_backend.config_databases,
+          'config-fetch-wait-time': kea_dhcp_config_backend.fetch_wait_time | default(20)
+        }}) -%}
+{%- endif -%}
+
+{#- control sockets ----------------------------------------------------- -#}
+{%- set unix_sock = {'socket-type': 'unix', 'socket-name': m.socket_path(fam)} -%}
+{%- if kea_dhcp__v3 | bool -%}
+{%-   set ns = namespace(socks=[]) -%}
+{%-   if kea_dhcp_unix_control_socket | bool -%}
+{%-     set ns.socks = ns.socks + [unix_sock] -%}
+{%-   endif -%}
+{%-   if kea_dhcp__api_http | bool -%}
+{%-     set http = {
+          'socket-type': ('https' if kea_dhcp_api_tls | length > 0 else 'http'),
+          'socket-address': kea_dhcp__api_address,
+          'socket-port': kea_dhcp_api_ports[fam]} | combine(kea_dhcp_api_tls) -%}
+{%-     if kea_dhcp_api_auth_clients | length > 0 -%}
+{%-       set ns2 = namespace(clients=[]) -%}
+{%-       for c in kea_dhcp_api_auth_clients -%}
+{%-         set ns2.clients = ns2.clients + [{'user-file': c.user ~ '.user', 'password-file': c.user ~ '.password'}] -%}
+{%-       endfor -%}
+{%-       set http = http | combine({'authentication': {
+            'type': 'basic', 'realm': kea_dhcp_api_auth_realm,
+            'directory': kea_dhcp_api_auth_dir, 'clients': ns2.clients}}) -%}
+{%-     endif -%}
+{%-     set ns.socks = ns.socks + [http | combine(kea_dhcp_api_http_extra, recursive=true)] -%}
+{%-   endif -%}
+{%-   if ns.socks | length > 0 -%}
+{%-     set cfg = cfg | combine({'control-sockets': ns.socks}) -%}
+{%-   endif -%}
+{%- elif kea_dhcp_unix_control_socket | bool or kea_dhcp__ctrl_agent | bool -%}
+{%-   set cfg = cfg | combine({'control-socket': unix_sock}) -%}
+{%- endif -%}
+
+{#- HA without multi-threading must run on a single-threaded server: Kea
+    starts but HA never leaves WAITING (HA_RESUME_CLIENT_LISTENER_FAILED)
+    when the two settings disagree. Verified live on 2.6.5. -#}
+{%- if kea_dhcp_ha_enabled | bool and fam in kea_dhcp_ha_families
+      and not (kea_dhcp__ha_mt['enable-multi-threading'] | default(true) | bool) -%}
+{%-   set cfg = cfg | combine({'multi-threading': {'enable-multi-threading': false}}) -%}
+{%- endif -%}
+
+{#- DDNS ---------------------------------------------------------------- -#}
+{%- if kea_dhcp_ddns_enabled | bool -%}
+{%-   set cfg = cfg | combine({'dhcp-ddns': {'enable-updates': true}}) -%}
+{%- endif -%}
+
+{#- loggers ------------------------------------------------------------- -#}
+{%- if kea_dhcp_loggers | length > 0 -%}
+{%-   set cfg = cfg | combine({'loggers': kea_dhcp_loggers}) -%}
+{%- else -%}
+{%-   set cfg = cfg | combine({'loggers': [{
+        'name': 'kea-dhcp' ~ ver,
+        'output_options': [{'output': kea_dhcp_log_output}],
+        'severity': kea_dhcp_log_severity,
+        'debuglevel': kea_dhcp_log_debuglevel}]}) -%}
+{%- endif -%}
+
+{#- hooks --------------------------------------------------------------- -#}
+{%- set hk = namespace(libs=[], dbs=[]) -%}
+{%- set hk.dbs = [cfg['lease-database']] + kea_dhcp_hosts_databases
+      + (kea_dhcp_config_backend.config_databases if kea_dhcp_config_backend.enabled | default(false) | bool else [])
+      + ([user['lease-database']] if user['lease-database'] is defined else [])
+      + (user['hosts-databases'] | default([])) -%}
+{%- set db_types = hk.dbs | map(attribute='type') | list -%}
+{%- if kea_dhcp__v3 | bool -%}
+{#-   Since 2.7.4 SQL backends live in hook libraries. -#}
+{%-   if 'mysql' in db_types -%}{%- set hk.libs = hk.libs + [{'library': m.hook_path('libdhcp_mysql.so')}] -%}{%- endif -%}
+{%-   if 'postgresql' in db_types -%}{%- set hk.libs = hk.libs + [{'library': m.hook_path('libdhcp_pgsql.so')}] -%}{%- endif -%}
+{%- elif kea_dhcp_config_backend.enabled | default(false) | bool -%}
+{%-   set cb_types = kea_dhcp_config_backend.config_databases | map(attribute='type') | list -%}
+{%-   if 'mysql' in cb_types -%}{%- set hk.libs = hk.libs + [{'library': m.hook_path('libdhcp_mysql_cb.so')}] -%}{%- endif -%}
+{%-   if 'postgresql' in cb_types -%}{%- set hk.libs = hk.libs + [{'library': m.hook_path('libdhcp_pgsql_cb.so')}] -%}{%- endif -%}
+{%- endif -%}
+{%- set ha_on = kea_dhcp_ha_enabled | bool and fam in kea_dhcp_ha_families -%}
+{%- if ha_on or kea_dhcp_lease_cmds_enabled | bool -%}
+{%-   set hk.libs = hk.libs + [{'library': m.hook_path('libdhcp_lease_cmds.so')}] -%}
+{%- endif -%}
+{%- if ha_on -%}
+{%-   set me = kea_dhcp_ha_this_server_name -%}
+{%-   set port = kea_dhcp_ha_ports[fam] if kea_dhcp__ha_dedicated_listener | bool
+                else (kea_dhcp_api_ports[fam] if kea_dhcp__v3 | bool else kea_dhcp_api_ports['ctrl_agent']) -%}
+{%-   set rels = namespace(items=[]) -%}
+{%-   for rel in kea_dhcp__ha_relationships_all -%}
+{%-     if me in (rel.peers | default([]) | map(attribute='name') | list) -%}
+{%-       set peers = namespace(items=[]) -%}
+{%-       for p in rel.peers -%}
+{%-         if p.url is defined -%}
+{%-           set url = p.url -%}
+{%-         else -%}
+{%-           set addr = kea_dhcp__ha_peer_addresses[p.name] -%}
+{%-           set url = (p.scheme | default(kea_dhcp_ha_scheme)) ~ '://' ~ m.wrap_ip(addr) ~ ':' ~ (p.port | default(port)) ~ '/' -%}
+{%-         endif -%}
+{#-         Strip role-only helper keys; everything else is a Kea peer key. -#}
+{%-         set kea_keys = p | dict2items | rejectattr('key', 'in', ['host', 'address', 'port', 'scheme']) | items2dict -%}
+{#-         HA over the HTTP API (no dedicated listener) must authenticate
+            like any API client; Kea answers "Unauthorized" otherwise. -#}
+{%-         if kea_dhcp__ha_needs_api | bool and kea_dhcp_api_auth_clients | length > 0 and kea_keys['basic-auth-user'] is not defined -%}
+{%-           set auth_user = kea_dhcp_ha_api_auth_user if kea_dhcp_ha_api_auth_user | length > 0 else (kea_dhcp_api_auth_clients | first).user -%}
+{%-           set kea_keys = kea_keys | combine({'basic-auth-user': auth_user,
+                'basic-auth-password-file': kea_dhcp_api_auth_dir ~ '/' ~ auth_user ~ '.password'}) -%}
+{%-         endif -%}
+{%-         set peers.items = peers.items + [kea_keys | combine({'url': url})] -%}
+{%-       endfor -%}
+{%-       set r = kea_dhcp_ha_defaults
+                | combine(dict(rel | dict2items | rejectattr('key', 'eq', 'peers') | items2dict), recursive=true)
+                | combine({'this-server-name': me, 'peers': peers.items}) -%}
+{%-       set rels.items = rels.items + [r] -%}
+{%-     endif -%}
+{%-   endfor -%}
+{%-   set hk.libs = hk.libs + [{'library': m.hook_path('libdhcp_ha.so'), 'parameters': {'high-availability': rels.items}}] -%}
+{%- endif -%}
+{%- set extra = kea_dhcp_dhcp4_hooks_libraries if fam == 'dhcp4' else kea_dhcp_dhcp6_hooks_libraries -%}
+{%- for h in extra + user['hooks-libraries'] | default([]) -%}
+{%-   set hk.libs = hk.libs + [h | combine({'library': m.hook_path(h.library)})] -%}
+{%- endfor -%}
+
+{%- set final = cfg | combine(user, recursive=true) -%}
+{%- if hk.libs | length > 0 -%}
+{%-   set final = final | combine({'hooks-libraries': hk.libs}) -%}
+{%- endif -%}
+{{ final | to_json }}

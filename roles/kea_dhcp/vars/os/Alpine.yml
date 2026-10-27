@@ -1,0 +1,32 @@
+---
+# Alpine (OpenRC). ISC apks ship /etc/init.d/kea-dhcp4 etc. Alpine's own
+# packages (community repo; 2.6.x on 3.22) split every hook into its own apk.
+kea_dhcp__os_user: kea
+# Installed before any repository is added (HTTPS repos need a CA bundle).
+kea_dhcp__os_prereqs: [ca-certificates]
+kea_dhcp__os_packages:
+  isc:
+    dhcp4: [isc-kea-dhcp4]
+    dhcp6: [isc-kea-dhcp6]
+    ddns: [isc-kea-dhcp-ddns]
+    ctrl_agent: [isc-kea-ctrl-agent]
+    hooks: [isc-kea-hooks]
+    mysql: [isc-kea-mysql]
+    postgresql: [isc-kea-pgsql]
+    admin: [isc-kea-admin]
+  distro:
+    dhcp4: [kea-dhcp4]
+    dhcp6: [kea-dhcp6]
+    ddns: [kea-dhcp-ddns]
+    ctrl_agent: [kea-ctrl-agent]
+    hooks: [kea-hook-lease-cmds, kea-hook-ha]
+    mysql: [kea-hook-mysql-cb]
+    postgresql: [kea-hook-pgsql-cb]
+    admin: [kea-admin]
+kea_dhcp__os_services:
+  isc: &kea_dhcp_alpine_services
+    dhcp4: kea-dhcp4
+    dhcp6: kea-dhcp6
+    ddns: kea-dhcp-ddns
+    ctrl_agent: kea-ctrl-agent
+  distro: *kea_dhcp_alpine_services

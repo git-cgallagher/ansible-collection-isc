@@ -1,0 +1,54 @@
+---
+# Kea on EKS. A VPC never delivers DHCP broadcasts to pods, so this serves
+# RELAYED DHCP only: on-prem / branch routers (ip helper-address) send unicast
+# over Direct Connect or VPN to an internal NLB in front of the pods. Leases
+# live in RDS PostgreSQL, so any replica can answer (shared_db topology).
+all:
+  children:
+    kea_eks:
+      hosts:
+        kea-eks: {}
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        kea_dhcp_deployment: kubernetes
+        kea_dhcp_k8s_platform: eks          # service network mode + udp sockets
+        kea_dhcp_k8s_topology: shared_db
+        kea_dhcp_k8s_replicas: 3
+        kea_dhcp_k8s_context: arn:aws:eks:us-east-1:111122223333:cluster/network
+        # ISC images are linux/amd64 only: keep Kea off Graviton node groups.
+        kea_dhcp_k8s_node_selector:
+          kubernetes.io/arch: amd64
+        kea_dhcp_k8s_service_annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: external
+          service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+          service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+          service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true
+          # NLB cannot health-check UDP: probe the Kea HTTP API's TCP port instead.
+          service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: TCP
+          service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "8000"
+        kea_dhcp_k8s_load_balancer_source_ranges: [10.0.0.0/8]
+        # Opens TCP 8000 in the pod (NLB health checks + k8s probes are plain TCP
+        # connects). Kea 3.2+ refuses an API with neither auth nor TLS.
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_http_address: 0.0.0.0
+        kea_dhcp_api_auth_clients:
+          - {user: stork, password: "{{ vault_kea_api_password }}"}
+        kea_dhcp_lease_database:
+          type: postgresql
+          host: kea.cluster-xxxx.us-east-1.rds.amazonaws.com
+          name: kea
+          user: kea
+          password: "{{ vault_kea_db_password }}"
+          retry-on-startup: true
+          max-reconnect-tries: 30
+          reconnect-wait-time: 2000
+          on-fail: serve-retry-continue
+        kea_dhcp_db_schema_manage: false  # run kea-admin db-init once from a host with DB access
+        kea_dhcp_dhcp4_settings:
+          subnet4:
+            - id: 100
+              subnet: 10.50.0.0/24          # a branch LAN behind a relay
+              relay: {ip-addresses: [10.50.0.1]}
+              pools: [{pool: 10.50.0.100 - 10.50.0.250}]
+              option-data: [{name: routers, data: 10.50.0.1}]

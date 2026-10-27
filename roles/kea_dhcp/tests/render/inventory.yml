@@ -1,0 +1,158 @@
+---
+# Render-only scenarios (kea_dhcp_k8s_apply: false). Each group is one
+# deployment shape; tests/validate.sh feeds every rendered config to
+# `kea-<daemon> -t` inside the matching ISC image.
+all:
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    kea_dhcp_deployment: kubernetes
+    kea_dhcp_k8s_apply: false
+    kea_dhcp_k8s_manifest_dir: "{{ playbook_dir }}/../output/{{ group_names | first }}"
+    kea_dhcp_dhcp4_settings:
+      valid-lifetime: 3600
+      subnet4:
+        - id: 1
+          subnet: 192.0.2.0/24
+          pools: [{pool: 192.0.2.100 - 192.0.2.200}]
+          option-data: [{name: routers, data: 192.0.2.1}]
+  children:
+    # 1. Single server, memfile, Talos host network.
+    v30_single:
+      hosts:
+        single1: {kea_dhcp_k8s_node_name: talos-w1, kea_dhcp_interfaces: [eth0]}
+      vars:
+        kea_dhcp_k8s_platform: talos
+    # 2. HA hot-standby pair on Talos host network (node IPs given explicitly).
+    v30_hot_standby:
+      hosts:
+        hs1: {kea_dhcp_k8s_node_name: talos-w1, kea_dhcp_ha_address: 10.0.0.11}
+        hs2: {kea_dhcp_k8s_node_name: talos-w2, kea_dhcp_ha_address: 10.0.0.12}
+      vars:
+        kea_dhcp_k8s_platform: talos
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_mode: hot-standby
+        kea_dhcp_ha_peers:
+          - {name: hs1, role: primary}
+          - {name: hs2, role: standby, auto-failover: true}
+    # 3. EKS load-balancing pair behind NLBs, TLS between peers, HTTPS API + auth.
+    v30_eks_lb_tls:
+      hosts:
+        lb1: {kea_dhcp_k8s_ha_cluster_ip: 172.20.10.11}
+        lb2: {kea_dhcp_k8s_ha_cluster_ip: 172.20.10.12}
+      vars:
+        kea_dhcp_k8s_platform: eks
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_mode: load-balancing
+        kea_dhcp_ha_scheme: https
+        kea_dhcp_ha_peers:
+          - {name: lb1, role: primary}
+          - {name: lb2, role: secondary}
+        kea_dhcp_ha_defaults:
+          heartbeat-delay: 10000
+          trust-anchor: /etc/kea/tls/ca.pem
+          cert-file: /etc/kea/tls/peer.pem
+          key-file: /etc/kea/tls/peer.key
+          require-client-certs: true
+          multi-threading: {enable-multi-threading: true, http-dedicated-listener: true}
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_http_address: 0.0.0.0
+        kea_dhcp_api_tls:
+          trust-anchor: /etc/kea/tls/ca.pem
+          cert-file: /etc/kea/tls/peer.pem
+          key-file: /etc/kea/tls/peer.key
+          cert-required: false
+        kea_dhcp_api_auth_clients:
+          - {user: stork, password: example-not-secret}
+        kea_dhcp_files: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/tls.json') | from_json }}"
+    # 4. Hub-and-spoke: one hub standing by for two branch primaries.
+    v30_hub_spoke:
+      hosts:
+        hub: {kea_dhcp_ha_address: 10.1.0.1}
+        branch1: {kea_dhcp_ha_address: 10.1.1.1}
+        branch2: {kea_dhcp_ha_address: 10.1.2.1}
+      vars:
+        kea_dhcp_k8s_platform: generic
+        kea_dhcp_k8s_node_name: "node-{{ inventory_hostname }}"
+        kea_dhcp_interfaces: ["*"]
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_relationships:
+          - mode: hot-standby
+            peers: [{name: branch1, role: primary}, {name: hub, role: standby}]
+          - mode: hot-standby
+            peers: [{name: branch2, role: primary}, {name: hub, role: standby}]
+    # 5. EKS shared PostgreSQL (RDS) lease DB, v4 + v6 + DDNS, N replicas.
+    v30_eks_shared_db:
+      hosts:
+        shared: {}
+      vars:
+        kea_dhcp_k8s_platform: eks
+        kea_dhcp_k8s_topology: shared_db
+        kea_dhcp_k8s_replicas: 3
+        kea_dhcp_dhcp6_enabled: true
+        kea_dhcp_ddns_enabled: true
+        kea_dhcp_lease_database:
+          type: postgresql
+          name: kea
+          host: kea.cluster-abc.us-east-1.rds.amazonaws.com
+          user: kea
+          password: example-not-secret
+          retry-on-startup: true
+          max-reconnect-tries: 10
+          reconnect-wait-time: 3000
+          on-fail: serve-retry-continue
+        kea_dhcp_dhcp6_settings:
+          subnet6:
+            - {id: 1, subnet: "2001:db8:1::/64", pools: [{pool: "2001:db8:1::100-2001:db8:1::1ff"}]}
+        kea_dhcp_ddns_settings:
+          forward-ddns:
+            ddns-domains:
+              - {name: example.org., dns-servers: [{ip-address: 192.0.2.53}]}
+        kea_dhcp_k8s_service_annotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: external
+          service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+          service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+    # 6. Kea 2.6, non-MT HA through the control agent, API auth.
+    v26_ha_ctrl_agent:
+      hosts:
+        old1: {kea_dhcp_k8s_node_name: n1, kea_dhcp_ha_address: 10.2.0.1}
+        old2: {kea_dhcp_k8s_node_name: n2, kea_dhcp_ha_address: 10.2.0.2}
+      vars:
+        kea_dhcp_version_series: "2.6"
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_peers: [{name: old1, role: primary}, {name: old2, role: standby}]
+        kea_dhcp_ha_defaults:
+          multi-threading: {enable-multi-threading: false}
+        kea_dhcp_api_auth_clients:
+          - {user: admin, password: example-not-secret}
+    # 7. Kea 3.2, load-balancing, MySQL config backend + MySQL leases, HTTP API
+    #    with basic auth (3.2 rejects an unsecured API and clear-text users).
+    v32_cb_mysql:
+      hosts:
+        cb1: {kea_dhcp_k8s_node_name: n1, kea_dhcp_ha_address: 10.3.0.1}
+        cb2: {kea_dhcp_k8s_node_name: n2, kea_dhcp_ha_address: 10.3.0.2}
+      vars:
+        kea_dhcp_version_series: "3.2"
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_mode: load-balancing
+        kea_dhcp_ha_peers: [{name: cb1, role: primary}, {name: cb2, role: secondary}]
+        kea_dhcp_lease_database: {type: mysql, name: kea, host: 10.3.0.50, user: kea, password: example-not-secret}
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_auth_clients: [{user: stork, password: example-not-secret}]
+        kea_dhcp_config_backend:
+          enabled: true
+          server_tag: "{{ inventory_hostname }}"
+          config_databases: [{type: mysql, name: kea, host: 10.3.0.50, user: kea, password: example-not-secret}]
+    # 8. Kea 2.6 with a PostgreSQL config backend (separate *_cb hook on 2.6).
+    v26_cb_pgsql:
+      hosts:
+        cb26: {kea_dhcp_k8s_node_name: n1}
+      vars:
+        kea_dhcp_version_series: "2.6"
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_config_backend:
+          enabled: true
+          config_databases: [{type: postgresql, name: kea, host: 10.4.0.50, user: kea, password: example-not-secret}]

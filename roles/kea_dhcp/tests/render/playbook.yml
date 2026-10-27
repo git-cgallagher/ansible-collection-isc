@@ -1,0 +1,6 @@
+---
+- name: Render kea_dhcp scenarios
+  hosts: all
+  gather_facts: false
+  roles:
+    - role: kea_dhcp

@@ -1,0 +1,488 @@
+---
+argument_specs:
+  main:
+    short_description: ISC Kea DHCP from packages or on Kubernetes (Talos, EKS)
+    description:
+      - Installs and configures Kea DHCPv4/DHCPv6/DDNS with HA, shared SQL databases and the config backend.
+      - Kea settings are passed through; see README.md.
+    author:
+      - Chris Gallagher
+    options:
+      kea_dhcp_deployment:
+        type: str
+        description: 'Where Kea runs: OS packages on the inventory host, or Kubernetes from the controller.'
+        choices:
+          - package
+          - kubernetes
+      kea_dhcp_version_series:
+        type: str
+        description: Kea release series, e.g. "3.0" (LTS), "3.2", "2.6" (EOL). Selects repo, config dialect and image tag.
+      kea_dhcp_dhcp4_enabled:
+        type: bool
+        description: Run kea-dhcp4.
+      kea_dhcp_dhcp6_enabled:
+        type: bool
+        description: Run kea-dhcp6.
+      kea_dhcp_ddns_enabled:
+        type: bool
+        description: Run kea-dhcp-ddns (D2) and enable DDNS updates in the DHCP daemons.
+      kea_dhcp_ctrl_agent_enabled:
+        type: raw
+        description: 'Kea 2.6 control agent: auto, true or false. Not available on 3.x.'
+      kea_dhcp_package_source:
+        type: str
+        description: Package origin.
+        choices:
+          - isc
+          - distro
+          - none
+      kea_dhcp_package_state:
+        type: str
+        description: State for Kea packages.
+        choices:
+          - present
+          - latest
+      kea_dhcp_prerequisite_packages:
+        type: list
+        description: Packages installed before repositories (empty = OS default, ca-certificates).
+        elements: str
+      kea_dhcp_packages_extra:
+        type: list
+        description: Additional packages to install.
+        elements: str
+      kea_dhcp_packages_override:
+        type: list
+        description: Replace the computed package list entirely.
+        elements: str
+      kea_dhcp_isc_repo_manage:
+        type: bool
+        description: Configure the ISC Cloudsmith repository for the version series.
+      kea_dhcp_isc_repo_base_url:
+        type: str
+        description: Base URL of the ISC Cloudsmith organisation.
+      kea_dhcp_isc_repo_token:
+        type: str
+        description: Cloudsmith token for ISC subscriber (-prv) repositories.
+        no_log: true
+      kea_dhcp_isc_repo_alpine_key_ids:
+        type: dict
+        description: Cloudsmith RSA key ID per ISC repo name; apk matches keys by file name.
+      kea_dhcp_isc_repo_alpine_version:
+        type: str
+        description: Alpine branch used in the ISC repo URL (e.g. "3.20"); empty = the host's release.
+      kea_dhcp_epel_manage:
+        type: bool
+        description: 'EL only: install EPEL (Kea RPMs need log4cplus from it).'
+      kea_dhcp_epel_package:
+        type: str
+        description: EPEL release package name or RPM URL; empty = epel-release, or the release URL on RHEL.
+      kea_dhcp_extra_repositories:
+        type: list
+        description: Extra apt/yum/apk repositories (see README for item keys).
+        elements: dict
+      kea_dhcp_bootstrap_python:
+        type: bool
+        description: 'Install python3 with a raw command first (needs gather_facts: false).'
+      kea_dhcp_manage_service:
+        type: bool
+        description: Enable/start services and restart them on change.
+      kea_dhcp_service_manager:
+        type: str
+        description: Service manager; auto uses ansible_facts.service_mgr.
+        choices:
+          - auto
+          - systemd
+          - openrc
+          - sysvinit
+          - service
+          - none
+      kea_dhcp_service_enabled:
+        type: bool
+        description: Enable services at boot.
+      kea_dhcp_service_state:
+        type: str
+        description: Service state.
+        choices:
+          - started
+          - stopped
+      kea_dhcp_service_names:
+        type: dict
+        description: Override unit/script names keyed by dhcp4, dhcp6, ddns, ctrl_agent.
+      kea_dhcp_validate_config:
+        type: bool
+        description: Validate each config with kea-<daemon> -t before installing it.
+      kea_dhcp_config_dir:
+        type: str
+        description: Kea configuration directory.
+      kea_dhcp_run_dir:
+        type: str
+        description: Unix socket directory (2.6 absolute socket paths). Must be /var/run/kea on 2.6.3+.
+      kea_dhcp_data_dir:
+        type: str
+        description: Lease/data directory (mount point in Kubernetes).
+      kea_dhcp_hooks_dir:
+        type: str
+        description: Hooks directory for 2.6 absolute library paths; empty = detect.
+      kea_dhcp_user:
+        type: str
+        description: Kea system user; empty = OS default.
+      kea_dhcp_group:
+        type: str
+        description: Kea system group; empty = the user.
+      kea_dhcp_files:
+        type: list
+        description: 'Files to install on the host or mount into pods: {dest, content|src, mode, owner, group}.'
+        elements: dict
+        no_log: true
+      kea_dhcp_interfaces:
+        type: list
+        description: Interfaces to serve on (required unless Kubernetes service mode). ["*"] = all.
+        elements: str
+      kea_dhcp_dhcp4_interfaces:
+        type: list
+        description: DHCPv4 interfaces (defaults to kea_dhcp_interfaces).
+        elements: str
+      kea_dhcp_dhcp6_interfaces:
+        type: list
+        description: DHCPv6 interfaces (defaults to kea_dhcp_interfaces).
+        elements: str
+      kea_dhcp_dhcp4_socket_type:
+        type: str
+        description: raw serves directly connected clients; udp serves relayed traffic only.
+        choices:
+          - raw
+          - udp
+      kea_dhcp_lease_database:
+        type: dict
+        description: Kea lease-database object (memfile, mysql, postgresql), passed through.
+        no_log: true
+      kea_dhcp_dhcp4_lease_database:
+        type: dict
+        description: DHCPv4 lease-database (defaults to kea_dhcp_lease_database).
+        no_log: true
+      kea_dhcp_dhcp6_lease_database:
+        type: dict
+        description: DHCPv6 lease-database (defaults to kea_dhcp_lease_database).
+        no_log: true
+      kea_dhcp_hosts_databases:
+        type: list
+        description: Kea hosts-databases list.
+        elements: dict
+        no_log: true
+      kea_dhcp_config_backend:
+        type: dict
+        description: 'Configuration backend: enabled, server_tag, config_databases, fetch_wait_time.'
+        no_log: true
+      kea_dhcp_db_schema_manage:
+        type: bool
+        description: Initialise SQL schemas with kea-admin (once per play).
+      kea_dhcp_db_schema_upgrade:
+        type: bool
+        description: Also run kea-admin db-upgrade on existing schemas.
+      kea_dhcp_unix_control_socket:
+        type: bool
+        description: Configure unix control sockets.
+      kea_dhcp_api_http_enabled:
+        type: bool
+        description: Expose the HTTP(S) control API (per daemon on 3.x, control agent on 2.6).
+      kea_dhcp_api_http_address:
+        type: str
+        description: Address the HTTP API binds to.
+      kea_dhcp_api_ports:
+        type: dict
+        description: HTTP API ports keyed by dhcp4, dhcp6, ddns, ctrl_agent.
+      kea_dhcp_api_tls:
+        type: dict
+        description: 'Kea TLS keys for the API: trust-anchor, cert-file, key-file, cert-required.'
+      kea_dhcp_api_auth_clients:
+        type: list
+        description: 'Basic-auth clients: {user, password}. Passwords are written to files.'
+        elements: dict
+        no_log: true
+      kea_dhcp_api_auth_realm:
+        type: str
+        description: Basic-auth realm.
+      kea_dhcp_api_auth_dir:
+        type: str
+        description: Directory for basic-auth password files.
+      kea_dhcp_api_http_extra:
+        type: dict
+        description: Extra keys merged into each HTTP control socket (e.g. http-headers).
+      kea_dhcp_ha_enabled:
+        type: bool
+        description: Load libdhcp_ha.so (and libdhcp_lease_cmds.so).
+      kea_dhcp_ha_families:
+        type: list
+        description: Families HA applies to.
+        elements: str
+        choices:
+          - dhcp4
+          - dhcp6
+      kea_dhcp_ha_this_server_name:
+        type: str
+        description: This server's peer name.
+      kea_dhcp_ha_address:
+        type: str
+        description: IP peers use to reach this server.
+      kea_dhcp_ha_ports:
+        type: dict
+        description: Dedicated HA listener ports keyed by dhcp4, dhcp6.
+      kea_dhcp_ha_api_auth_user:
+        type: str
+        description: API client HA authenticates as when it uses the HTTP API; empty = first auth client.
+      kea_dhcp_ha_scheme:
+        type: str
+        description: Scheme for generated peer URLs.
+        choices:
+          - http
+          - https
+      kea_dhcp_ha_mode:
+        type: str
+        description: Mode for the simple single-relationship form.
+        choices:
+          - hot-standby
+          - load-balancing
+          - passive-backup
+      kea_dhcp_ha_peers:
+        type: list
+        description: 'Peers for the simple form: Kea peer keys plus helpers host, address, port, scheme.'
+        elements: dict
+      kea_dhcp_ha_relationships:
+        type: list
+        description: 'Full form: list of Kea high-availability entries (hub-and-spoke).'
+        elements: dict
+      kea_dhcp_ha_defaults:
+        type: dict
+        description: Keys merged into every HA relationship.
+      kea_dhcp_dhcp4_settings:
+        type: dict
+        description: Kea Dhcp4 keys deep-merged over the computed config.
+      kea_dhcp_dhcp6_settings:
+        type: dict
+        description: Kea Dhcp6 keys deep-merged over the computed config.
+      kea_dhcp_ddns_settings:
+        type: dict
+        description: Kea DhcpDdns keys deep-merged over the computed config.
+      kea_dhcp_ctrl_agent_settings:
+        type: dict
+        description: Kea Control-agent keys deep-merged over the computed config (2.6).
+      kea_dhcp_dhcp4_hooks_libraries:
+        type: list
+        description: Extra Dhcp4 hook libraries ({library, parameters}).
+        elements: dict
+      kea_dhcp_dhcp6_hooks_libraries:
+        type: list
+        description: Extra Dhcp6 hook libraries.
+        elements: dict
+      kea_dhcp_ddns_hooks_libraries:
+        type: list
+        description: Extra DhcpDdns hook libraries.
+        elements: dict
+      kea_dhcp_lease_cmds_enabled:
+        type: bool
+        description: Load libdhcp_lease_cmds.so without HA.
+      kea_dhcp_log_output:
+        type: str
+        description: Logger output (stdout, stderr, syslog, or a bare file name on 3.x).
+      kea_dhcp_log_severity:
+        type: str
+        description: Logger severity.
+        choices:
+          - FATAL
+          - ERROR
+          - WARN
+          - INFO
+          - DEBUG
+      kea_dhcp_log_debuglevel:
+        type: int
+        description: Logger debug level (0-99).
+      kea_dhcp_loggers:
+        type: list
+        description: Replace the computed loggers list.
+        elements: dict
+      kea_dhcp_k8s_platform:
+        type: str
+        description: Cluster flavour; selects defaults.
+        choices:
+          - talos
+          - eks
+          - generic
+      kea_dhcp_k8s_topology:
+        type: str
+        description: ha_peers (one Deployment per host) or shared_db (replicas on one SQL lease DB).
+        choices:
+          - ha_peers
+          - shared_db
+      kea_dhcp_k8s_network_mode:
+        type: str
+        description: host (hostNetwork, broadcast) or service (pod network, relayed only).
+        choices:
+          - host
+          - service
+      kea_dhcp_k8s_kubeconfig:
+        type: str
+        description: Kubeconfig path; empty = kubernetes.core default.
+      kea_dhcp_k8s_context:
+        type: str
+        description: Kubeconfig context; empty = current.
+      kea_dhcp_k8s_namespace:
+        type: str
+        description: Namespace.
+      kea_dhcp_k8s_create_namespace:
+        type: bool
+        description: Create the namespace.
+      kea_dhcp_k8s_namespace_labels:
+        type: dict
+        description: Extra namespace labels.
+      kea_dhcp_k8s_state:
+        type: str
+        description: present or absent.
+        choices:
+          - present
+          - absent
+      kea_dhcp_k8s_absent_delete_pvc:
+        type: bool
+        description: With state=absent, also delete the lease PVC.
+      kea_dhcp_k8s_apply:
+        type: bool
+        description: Apply to the cluster (false = render only).
+      kea_dhcp_k8s_manifest_dir:
+        type: str
+        description: Write rendered manifests here (empty = do not write).
+      kea_dhcp_k8s_wait:
+        type: bool
+        description: Wait for workloads to become ready.
+      kea_dhcp_k8s_wait_timeout:
+        type: int
+        description: Wait timeout in seconds.
+      kea_dhcp_k8s_name:
+        type: str
+        description: Base name for objects.
+      kea_dhcp_k8s_instance_name:
+        type: str
+        description: Object name for this instance.
+      kea_dhcp_k8s_labels:
+        type: dict
+        description: Labels on every object.
+      kea_dhcp_k8s_annotations:
+        type: dict
+        description: Annotations on the workload.
+      kea_dhcp_k8s_image_registry:
+        type: str
+        description: Image registry/prefix.
+      kea_dhcp_k8s_image_tag:
+        type: str
+        description: Image tag.
+      kea_dhcp_k8s_images:
+        type: dict
+        description: 'Image per daemon: dhcp4, dhcp6, ddns, ctrl_agent.'
+      kea_dhcp_k8s_image_pull_policy:
+        type: str
+        description: Image pull policy.
+        choices:
+          - Always
+          - IfNotPresent
+          - Never
+      kea_dhcp_k8s_image_pull_secrets:
+        type: list
+        description: 'Pull secrets ([{name: ...}]).'
+        elements: dict
+      kea_dhcp_k8s_node_name:
+        type: str
+        description: Pin this instance to a node (required for host-mode HA peers).
+      kea_dhcp_k8s_node_selector:
+        type: dict
+        description: Node selector (default keeps pods on amd64 nodes).
+      kea_dhcp_k8s_tolerations:
+        type: list
+        description: Tolerations.
+        elements: dict
+      kea_dhcp_k8s_affinity:
+        type: dict
+        description: Affinity (shared_db gets soft anti-affinity when empty).
+      kea_dhcp_k8s_priority_class_name:
+        type: str
+        description: PriorityClass.
+      kea_dhcp_k8s_replicas:
+        type: int
+        description: Replicas for shared_db in service mode.
+      kea_dhcp_k8s_storage_type:
+        type: str
+        description: Lease storage for ha_peers.
+        choices:
+          - hostPath
+          - pvc
+          - emptyDir
+      kea_dhcp_k8s_host_path_base:
+        type: str
+        description: hostPath parent directory.
+      kea_dhcp_k8s_pvc_size:
+        type: str
+        description: PVC size.
+      kea_dhcp_k8s_pvc_storage_class:
+        type: str
+        description: PVC StorageClass; empty = cluster default.
+      kea_dhcp_k8s_service_type:
+        type: str
+        description: DHCP Service type in service mode.
+        choices:
+          - LoadBalancer
+          - NodePort
+          - ClusterIP
+      kea_dhcp_k8s_service_annotations:
+        type: dict
+        description: DHCP Service annotations (load balancer controller settings).
+      kea_dhcp_k8s_load_balancer_class:
+        type: str
+        description: loadBalancerClass.
+      kea_dhcp_k8s_load_balancer_source_ranges:
+        type: list
+        description: loadBalancerSourceRanges.
+        elements: str
+      kea_dhcp_k8s_external_traffic_policy:
+        type: str
+        description: externalTrafficPolicy.
+        choices:
+          - Local
+          - Cluster
+      kea_dhcp_k8s_ha_cluster_ip:
+        type: str
+        description: Fixed ClusterIP for this peer's HA Service (render-only runs).
+      kea_dhcp_k8s_ha_address_from_node:
+        type: bool
+        description: 'Host mode: read the HA address from the node InternalIP.'
+      kea_dhcp_k8s_resources:
+        type: dict
+        description: Container resources.
+      kea_dhcp_k8s_service_account_annotations:
+        type: dict
+        description: ServiceAccount annotations (e.g. IRSA role ARN).
+      kea_dhcp_k8s_pod_annotations:
+        type: dict
+        description: Pod annotations.
+      kea_dhcp_k8s_pod_labels:
+        type: dict
+        description: Pod labels.
+      kea_dhcp_k8s_env:
+        type: list
+        description: Container env entries.
+        elements: dict
+      kea_dhcp_k8s_extra_volumes:
+        type: list
+        description: Extra pod volumes.
+        elements: dict
+      kea_dhcp_k8s_extra_volume_mounts:
+        type: list
+        description: Extra mounts for Kea containers.
+        elements: dict
+      kea_dhcp_k8s_extra_containers:
+        type: list
+        description: Extra containers (sidecars).
+        elements: dict
+      kea_dhcp_k8s_capabilities:
+        type: list
+        description: Linux capabilities kept for Kea containers.
+        elements: str
+      kea_dhcp_k8s_probes:
+        type: dict
+        description: 'Probe overrides per daemon ({dhcp4: {readinessProbe: ...}}).'

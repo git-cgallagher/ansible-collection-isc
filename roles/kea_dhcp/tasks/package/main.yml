@@ -1,0 +1,88 @@
+---
+- name: Load OS family variables
+  ansible.builtin.include_vars: "{{ lookup('ansible.builtin.first_found', kea_dhcp__os_vars) }}"
+  vars:
+    kea_dhcp__os_vars:
+      files:
+        - "os/{{ ansible_facts['os_family'] }}.yml"
+      paths:
+        - "{{ role_path }}/vars"
+
+- name: Assert the OS family is supported
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat', 'Alpine']
+      - kea_dhcp_package_source in ['isc', 'distro', 'none']
+    fail_msg: >-
+      Package mode supports Debian/Ubuntu, the RHEL family/Fedora and Alpine.
+      For anything else set kea_dhcp_package_source=none, install Kea yourself
+      and set kea_dhcp_service_names.
+    quiet: true
+
+- name: Resolve Kea user, group and service names
+  ansible.builtin.set_fact:
+    kea_dhcp__user: "{{ kea_dhcp_user if kea_dhcp_user | length > 0 else kea_dhcp__os_user }}"
+    kea_dhcp__group: "{{ kea_dhcp_group if kea_dhcp_group | length > 0 else (kea_dhcp_user if kea_dhcp_user | length > 0 else kea_dhcp__os_user) }}"
+    kea_dhcp__services: >-
+      {{ kea_dhcp__os_services[kea_dhcp_package_source if kea_dhcp_package_source != 'none' else 'isc']
+         | combine(kea_dhcp_service_names) }}
+    kea_dhcp__service_manager: >-
+      {{ ansible_facts['service_mgr'] | default('none')
+         if kea_dhcp_service_manager == 'auto' else kea_dhcp_service_manager }}
+
+- name: Install prerequisite packages
+  ansible.builtin.package:
+    name: "{{ kea_dhcp_prerequisite_packages if kea_dhcp_prerequisite_packages | length > 0 else kea_dhcp__os_prereqs }}"
+    state: present
+    update_cache: "{{ omit if ansible_facts['os_family'] == 'RedHat' else true }}"
+  when: kea_dhcp_package_source != 'none'
+
+- name: Configure package repositories
+  ansible.builtin.include_tasks: "repos_{{ ansible_facts['os_family'] }}.yml"
+  when: >-
+    kea_dhcp_isc_repo_manage | bool or kea_dhcp_extra_repositories | length > 0
+    or (ansible_facts['os_family'] == 'RedHat' and kea_dhcp_epel_manage | bool)
+
+- name: Install Kea packages
+  ansible.builtin.include_tasks: install.yml
+  when: kea_dhcp_package_source != 'none'
+
+- name: Detect the hooks directory
+  when: kea_dhcp_hooks_dir | length == 0 and not kea_dhcp__v3 | bool
+  block:
+    - name: Read the Kea build report
+      ansible.builtin.command:
+        argv: ["{{ kea_dhcp__binaries[kea_dhcp__families | first] }}", "-W"]
+      register: kea_dhcp__build_report
+      changed_when: false
+      check_mode: false
+
+    - name: Record the hooks directory from the build report
+      ansible.builtin.set_fact:
+        kea_dhcp__hooks_dir_detected: >-
+          {{ kea_dhcp__build_report.stdout | regex_search('Hooks directory:\s*(\S+)', '\1') | first }}
+
+- name: Set derived addresses and paths
+  ansible.builtin.set_fact:
+    kea_dhcp__hooks_dir_effective: "{{ kea_dhcp_hooks_dir if kea_dhcp_hooks_dir | length > 0 else kea_dhcp__hooks_dir_detected | default('') }}"
+    kea_dhcp__ha_bind_address: "{{ kea_dhcp_ha_address }}"
+    kea_dhcp__ha_advertise_address: "{{ kea_dhcp_ha_address }}"
+
+- name: Build configuration
+  ansible.builtin.include_tasks: ../config/build.yml
+
+- name: Install supporting files
+  ansible.builtin.include_tasks: files.yml
+
+- name: Install configuration
+  ansible.builtin.include_tasks: config.yml
+
+- name: Manage database schema
+  ansible.builtin.include_tasks: db_schema.yml
+  when: kea_dhcp_db_schema_manage | bool
+
+- name: Manage services
+  ansible.builtin.include_tasks: service.yml
+  when:
+    - kea_dhcp_manage_service | bool
+    - kea_dhcp__service_manager in ['systemd', 'openrc', 'sysvinit', 'service']

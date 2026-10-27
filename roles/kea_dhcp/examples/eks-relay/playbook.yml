@@ -1,0 +1,6 @@
+---
+- name: Kea DHCP on EKS (relayed DHCP)
+  hosts: kea_eks
+  gather_facts: false
+  roles:
+    - role: kea_dhcp

@@ -1,0 +1,57 @@
+---
+# Builds kea_dhcp__config: {daemon: {<Kea top-level key>: {...}}} for every
+# daemon this host runs. Shared by the package and Kubernetes paths.
+# Expects kea_dhcp__hooks_dir_effective and kea_dhcp__ha_bind_address facts.
+
+- name: Resolve HA peer addresses
+  ansible.builtin.set_fact:
+    kea_dhcp__ha_peer_addresses: "{{ lookup('ansible.builtin.template', 'config/ha_peer_addresses.json.j2') | from_json }}"
+  when: kea_dhcp_ha_enabled | bool
+
+# Kea only accepts IP literals in peer URLs. A hostname here usually means a
+# peer was left out of the play (--limit) and its inventory has no address.
+- name: Assert every HA peer resolved to an IP address
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp__peer.value is match('^[0-9a-fA-F:.]+$')
+    fail_msg: >-
+      HA peer "{{ kea_dhcp__peer.key }}" resolved to "{{ kea_dhcp__peer.value }}", not an IP.
+      Run the play against all peers, or give the peer `address`/`url`, or set
+      kea_dhcp_ha_address (kea_dhcp_k8s_ha_cluster_ip in service mode) in its inventory.
+    quiet: true
+  loop: "{{ kea_dhcp__ha_peer_addresses | default({}) | dict2items }}"
+  loop_control:
+    loop_var: kea_dhcp__peer
+    label: "{{ kea_dhcp__peer.key }}"
+  # Removing a Kubernetes instance renders manifests only to name what to delete.
+  when: kea_dhcp_deployment != 'kubernetes' or kea_dhcp_k8s_state == 'present'
+
+- name: Build Kea DHCP daemon configuration
+  ansible.builtin.set_fact:
+    kea_dhcp__config: >-
+      {{ kea_dhcp__config | default({}) | combine({
+           kea_dhcp__fam: {
+             ('Dhcp4' if kea_dhcp__fam == 'dhcp4' else 'Dhcp6'):
+               lookup('ansible.builtin.template', 'config/dhcp.json.j2',
+                      template_vars={'kea_dhcp__family': kea_dhcp__fam}) | from_json
+           }}) }}
+  loop: "{{ kea_dhcp__families }}"
+  loop_control:
+    loop_var: kea_dhcp__fam
+  no_log: "{{ kea_dhcp__no_log | default(true) }}"
+
+- name: Build Kea DDNS configuration
+  ansible.builtin.set_fact:
+    kea_dhcp__config: >-
+      {{ kea_dhcp__config | default({}) | combine({'ddns': {'DhcpDdns':
+           lookup('ansible.builtin.template', 'config/ddns.json.j2') | from_json}}) }}
+  when: kea_dhcp_ddns_enabled | bool
+  no_log: "{{ kea_dhcp__no_log | default(true) }}"
+
+- name: Build Kea control agent configuration
+  ansible.builtin.set_fact:
+    kea_dhcp__config: >-
+      {{ kea_dhcp__config | default({}) | combine({'ctrl_agent': {'Control-agent':
+           lookup('ansible.builtin.template', 'config/ctrl_agent.json.j2') | from_json}}) }}
+  when: kea_dhcp__ctrl_agent | bool
+  no_log: "{{ kea_dhcp__no_log | default(true) }}"

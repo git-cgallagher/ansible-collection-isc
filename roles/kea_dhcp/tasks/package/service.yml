@@ -1,0 +1,9 @@
+---
+- name: Enable and start Kea services
+  ansible.builtin.service:
+    name: "{{ kea_dhcp__services[kea_dhcp__daemon] }}"
+    enabled: "{{ kea_dhcp_service_enabled }}"
+    state: "{{ kea_dhcp_service_state }}"
+  loop: "{{ kea_dhcp__daemons }}"
+  loop_control:
+    loop_var: kea_dhcp__daemon
