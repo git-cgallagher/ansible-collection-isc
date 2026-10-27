@@ -1,7 +1,8 @@
 # AGENTS.md — ansible-role-kea-dhcp
 
-Standalone Ansible role `kea_dhcp` (Galaxy name `cgallagher.kea_dhcp`). Local git repo; **no
-remote yet** — do not push or create one without the owner's go.
+Standalone Ansible role `kea_dhcp` (Galaxy: `git-cgallagher.kea_dhcp`). **Public** repo
+https://github.com/git-cgallagher/ansible-role-kea-dhcp (secret scanning + push protection +
+Dependabot security updates on). Galaxy: `git-cgallagher.kea_dhcp` (imported from `main`; re-import after releases). Work on branches + PRs.
 
 ## Layout
 - `defaults/main.yml` — public interface, documented inline. `meta/argument_specs.yml` — the
@@ -14,6 +15,8 @@ remote yet** — do not push or create one without the owner's go.
   `tasks/config/build.yml` — shared config build.
 
 ## Checks (all must pass before a change is done)
+CI (`.github/workflows/ci.yml`) runs all three on push/PR and weekly (Tue 13:00 UTC); Molecule
+runs per distro (`molecule test --platform-name <name>`) natively on amd64 runners.
 ```bash
 ansible-lint                      # production profile, must stay clean
 tests/run.sh                      # renders 8 shapes, kea -t in ISC 2.6.5/3.0.4/3.2.1 images
@@ -60,7 +63,10 @@ molecule test                     # package installs on 5 distros (amd64; slow u
 - Molecule on Apple silicon: a locally cached arm64 tag (e.g. `alpine:3.22`) blocks creating the
   amd64 container — `docker pull --platform linux/amd64 <image>` first.
 
+- Galaxy's role importer takes `galaxy_info.namespace` **verbatim** as the legacy namespace
+  (`overriding namespace name via metadata`). It must be exactly `git-cgallagher`; `cgallagher`
+  and `git_cgallagher` fail with "legacy namespace … does not exist". Lint accepts the hyphen.
+
 ## TODO / follow-ups
 - `kea-admin` schema management is untested against a live MySQL/PostgreSQL.
 - Molecule cannot start services (no init in containers); service start is untested in CI.
-- No CI workflow yet (repo has no remote).

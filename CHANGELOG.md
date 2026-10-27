@@ -27,5 +27,9 @@ All notable changes to this role. Format: [Keep a Changelog](https://keepachange
   Pods set `KEA_PIDFILE_DIR=/tmp` (stale PID file on 2.6 container restarts).
 - Verified live on a 3-node kind cluster: Talos-style host-network HA and EKS-style
   ClusterIP-service HA both reach HOT-STANDBY; re-runs idempotent; removal works.
+- README follows the standard Galaxy role layout (Requirements, Installation, Role Variables,
+  Dependencies, Example Playbook, License, Author Information); Galaxy name `git-cgallagher.kea_dhcp`
+  (`galaxy_info.namespace: git-cgallagher`; the importer uses it verbatim).
+- Public GitHub repo with CI: ansible-lint, render + `kea -t`, Molecule matrix (weekly too).
 - Tests: render + `kea -t` validation of 8 shapes in ISC 2.6.5/3.0.4/3.2.1 images; Molecule
   package install on Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20/3.22.
