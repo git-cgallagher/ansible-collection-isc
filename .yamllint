@@ -2,7 +2,7 @@
 extends: default
 ignore: |
   collections/
-  .rendered/
+  .molecule-collections/
 rules:
   line-length: { max: 160, level: warning }
   truthy: { allowed-values: ["true", "false"], check-keys: false }

@@ -1,0 +1,26 @@
+---
+# shadow-utils MUST land in an earlier transaction than the Stork RPMs: their
+# %pre scriptlets call groupadd/useradd, and minimal images (AL2023) lack them.
+- name: Install prerequisites (separate transaction)
+  ansible.builtin.package:
+    name: [shadow-utils, ca-certificates]
+    state: present
+
+- name: Add the ISC Stork repository
+  ansible.builtin.yum_repository:
+    name: "isc-{{ stork_repository_name }}"
+    description: "ISC {{ stork_repository_name }}"
+    # Amazon Linux 2023 has no ISC repo of its own; the EL9 builds work.
+    baseurl: >-
+      {{ _stork_repository_url }}/rpm/{{ _distro }}/{{ _release }}/$basearch
+    gpgkey: "{{ _stork_repository_url }}/gpg.key"
+    gpgcheck: true
+    repo_gpgcheck: true
+    sslverify: true
+    metadata_expire: "300"
+  vars:
+    _distro: "{{ 'fedora' if ansible_facts['distribution'] == 'Fedora' else 'el' }}"
+    _release: >-
+      {{ '9' if ansible_facts['distribution'] == 'Amazon'
+         else ansible_facts['distribution_version'] if ansible_facts['distribution'] == 'Fedora'
+         else ansible_facts['distribution_major_version'] }}

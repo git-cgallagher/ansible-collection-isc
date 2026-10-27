@@ -1,0 +1,71 @@
+---
+# Where Kea runs decides where the agent runs — always NEXT TO Kea, because
+# it finds Kea by scanning processes and reading the config file named on
+# Kea's command line.
+#   package    — Kea installed from packages on this host: native agent
+#   container  — Kea in a container on this host: agent in a container too
+#                (it runs `kea-dhcp4 -v` from its own filesystem to identify
+#                daemons, and the host has no Kea binary)
+#   kubernetes — Kea in a pod: this role OUTPUTS a sidecar spec
+#                (stork_agent_k8s_containers / stork_agent_k8s_volumes) for
+#                your Kea role's pod template; see README
+stork_agent_deploy_mode: package
+
+stork_agent_version: ""          # e.g. "2.6.0"; empty = latest in the repo
+
+# REQUIRED: where the agent registers.
+stork_agent_server_url: ""
+# How the Stork server reaches this agent (IP or DNS name).
+stork_agent_address: "{{ ansible_host | default(inventory_hostname) }}"
+stork_agent_port: 8080
+
+# Unattended registration. Give the server token directly (Stork UI:
+# "Installing Stork Agent on a New Machine"), or give API credentials and
+# the role reads it from the server. With neither, the machine appears under
+# Services -> Machines -> Unauthorized for manual approval.
+stork_agent_server_token: ""     # vault it
+stork_agent_api_user: admin
+stork_agent_api_password: ""     # vault it
+# URL the CONTROL NODE uses for those API calls (defaults to the agents' URL).
+stork_agent_api_url: "{{ stork_agent_server_url }}"
+
+stork_agent_skip_tls_verify: false
+stork_agent_prometheus_kea_port: 9547
+stork_agent_prometheus_kea_per_subnet_stats: true
+stork_agent_extra_env: {}
+
+# Kea's system group. The agent joins it to read Kea's config, logs and API
+# password files. "" = detect (_kea on Debian/Ubuntu, kea elsewhere).
+stork_agent_kea_group: ""
+
+# --- container mode ---
+# REQUIRED in container/kubernetes mode. ISC publishes no Stork image; build
+# docker/Dockerfile.stork-agent (it bundles the Kea binaries the agent execs).
+stork_agent_image: ""
+stork_agent_container_runtime: auto   # auto | podman | docker
+stork_agent_container_pull: true
+# Host paths shared read-only with the agent container. They must be mounted
+# at the SAME paths Kea sees, because the agent follows the config path from
+# Kea's command line. Add any directory holding Kea API password files.
+stork_agent_container_kea_mounts: [/etc/kea, /var/log/kea]
+
+# --- kubernetes mode ---
+# Mounts for the sidecar, using volume names from YOUR Kea pod. Paths must
+# match the Kea container's. Default suits a pod with a "config" volume at
+# /etc/kea; see README for git_cgallagher's kea_dhcp role.
+stork_agent_k8s_volume_mounts:
+  - { name: config, mountPath: /etc/kea, readOnly: true }
+# Address the server uses for each pod. Kubernetes expands $(VAR) from the
+# container env; POD_IP and POD_NAME are provided. Prefer a stable per-pod
+# Service name when you have one: pod IPs change on restart and the old
+# machine entry is left behind in Stork.
+stork_agent_k8s_address: "$(POD_IP)"
+stork_agent_k8s_resources:
+  requests: { cpu: 20m, memory: 64Mi }
+  limits: { memory: 256Mi }
+# Store the registration token in a Secret the sidecar reads.
+stork_agent_k8s_manage_secret: true
+stork_agent_k8s_namespace: ""        # REQUIRED for the Secret: Kea's namespace
+stork_agent_k8s_secret_name: stork-agent
+stork_agent_k8s_kubeconfig: ""
+stork_agent_k8s_context: ""

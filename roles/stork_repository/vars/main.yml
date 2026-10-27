@@ -1,0 +1,5 @@
+---
+_stork_repository_formats:
+  Debian: deb
+  RedHat: rpm
+  Alpine: apk

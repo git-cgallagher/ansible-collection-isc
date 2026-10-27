@@ -1,0 +1,22 @@
+---
+- name: Check inputs
+  ansible.builtin.assert:
+    that:
+      - stork_server_deploy_mode in ['package', 'kubernetes']
+      - stork_server_db_password | length > 0
+      - stork_server_deploy_mode != 'kubernetes' or stork_server_k8s_image | length > 0
+      - stork_server_deploy_mode != 'kubernetes' or stork_server_db_host not in ['localhost', '127.0.0.1']
+    fail_msg: >-
+      stork_server_deploy_mode must be package or kubernetes, and
+      stork_server_db_password is required (vault it). Kubernetes mode also
+      needs stork_server_k8s_image (ISC publishes none) and an external
+      stork_server_db_host.
+    quiet: true
+
+- name: Deploy on this host
+  ansible.builtin.include_tasks: package.yml
+  when: stork_server_deploy_mode == 'package'
+
+- name: Deploy to Kubernetes
+  ansible.builtin.include_tasks: kubernetes.yml
+  when: stork_server_deploy_mode == 'kubernetes'

@@ -1,0 +1,19 @@
+---
+- name: Work out the package format
+  ansible.builtin.set_fact:
+    stork_repository_pkg_format: "{{ _stork_repository_formats[ansible_facts['os_family']] | default('') }}"
+    _stork_repository_url: >-
+      {{ stork_repository_base_url | replace('/public', '/' ~ stork_repository_cloudsmith_token)
+         if stork_repository_cloudsmith_token | length > 0 else stork_repository_base_url }}/{{
+         stork_repository_name ~ ('-prv' if stork_repository_cloudsmith_token | length > 0 else '') }}
+
+- name: Check the platform has ISC Stork packages
+  ansible.builtin.assert:
+    that: stork_repository_pkg_format | length > 0
+    fail_msg: >-
+      {{ ansible_facts['distribution'] }} has no ISC Stork packages. Run the
+      agent in a container (stork_agent_deploy_mode: container).
+    quiet: true
+
+- name: Configure the repository
+  ansible.builtin.include_tasks: "{{ stork_repository_pkg_format }}.yml"

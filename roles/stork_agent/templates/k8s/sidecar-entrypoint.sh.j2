@@ -1,0 +1,14 @@
+# Registration persists in /var/lib/stork-agent for the pod's lifetime.
+if [ ! -f /var/lib/stork-agent/root-cert.pem ]; then
+  # register's last step binds a ping listener on --agent-host, which fails
+  # when that is a Service address the pod doesn't own. The certificates are
+  # already stored by then, so that failure is benign; a real failure leaves
+  # no root-cert.pem and the container exits for the kubelet to retry.
+  stork-agent register --non-interactive \
+    --server-url "$REGISTER_SERVER_URL" \
+    --agent-host "$AGENT_ADDRESS" --agent-port "$STORK_AGENT_PORT" \
+    ${STORK_AGENT_SERVER_TOKEN:+--server-token "$STORK_AGENT_SERVER_TOKEN"} \
+    || echo "stork-agent register returned $?"
+  [ -f /var/lib/stork-agent/root-cert.pem ] || exit 1
+fi
+exec stork-agent

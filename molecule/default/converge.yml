@@ -1,11 +1,11 @@
 ---
-# Stork server first, so agents can fetch the server token and register.
+# Server first: the agents read the server token from its API.
 - name: Stork server
   hosts: stork_server
   become: true
-  roles: [kea_stork]
+  roles: [git_cgallagher.stork.stork_server]
 
-- name: Kea HA peers + Stork agents
+- name: Stork agents
   hosts: kea
   become: true
-  roles: [kea_stork]
+  roles: [git_cgallagher.stork.stork_agent]

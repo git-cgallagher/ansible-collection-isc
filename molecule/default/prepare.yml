@@ -1,0 +1,98 @@
+---
+# Test fixture: a minimal Kea per host, the way an independent Kea role
+# would leave it. NOT part of the collection.
+- name: Install Kea (fixture)
+  hosts: kea
+  become: true
+  vars:
+    _dist: "{{ ansible_facts['distribution'] | lower }}"
+    _repo: "https://dl.cloudsmith.io/public/isc/kea-{{ test_kea_branch }}"
+    _svc: "{{ 'isc-kea-dhcp4-server' if ansible_facts['os_family'] == 'Debian' else 'kea-dhcp4' }}"
+    _grp: "{{ '_kea' if ansible_facts['os_family'] == 'Debian' else 'kea' }}"
+  tasks:
+    - name: Debian repo
+      when: ansible_facts['os_family'] == 'Debian'
+      block:
+        - name: Key
+          ansible.builtin.get_url:
+            url: "{{ _repo }}/gpg.key"
+            dest: /etc/apt/keyrings/isc-kea.asc
+            mode: "0644"
+        - name: Source
+          ansible.builtin.apt_repository:
+            repo: "deb [signed-by=/etc/apt/keyrings/isc-kea.asc] {{ _repo }}/deb/{{ _dist }} {{ ansible_facts['distribution_release'] }} main"
+            filename: isc-kea
+            update_cache: true
+
+    - name: AL2023 repo (EL9 builds + EPEL log4cplus; shadow-utils first)
+      when: ansible_facts['distribution'] == 'Amazon'
+      block:
+        - name: Prereqs
+          ansible.builtin.dnf:
+            name: shadow-utils
+        - name: EPEL log4cplus only
+          ansible.builtin.yum_repository:
+            name: epel-log4cplus
+            description: EPEL 9 log4cplus
+            baseurl: https://dl.fedoraproject.org/pub/epel/9/Everything/$basearch/
+            gpgkey: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+            includepkgs: [log4cplus]
+        - name: ISC Kea
+          ansible.builtin.yum_repository:
+            name: isc-kea
+            description: ISC Kea
+            baseurl: "{{ _repo }}/rpm/el/9/$basearch"
+            gpgkey: "{{ _repo }}/gpg.key"
+            repo_gpgcheck: true
+
+    - name: Packages
+      ansible.builtin.package:
+        name: [isc-kea-dhcp4, isc-kea-hooks]
+
+    - name: API credentials (kea_dhcp layout)
+      when: test_kea_api_auth | bool
+      block:
+        - name: Directory
+          ansible.builtin.file:
+            path: /etc/kea/api-creds
+            state: directory
+            owner: root
+            group: "{{ _grp }}"
+            mode: "0750"
+        - name: Files
+          ansible.builtin.copy:
+            dest: "/etc/kea/api-creds/{{ item.f }}"
+            content: "{{ item.c }}"
+            owner: root
+            group: "{{ _grp }}"
+            mode: "0640"
+          loop:
+            - { f: stork.user, c: stork }
+            - { f: stork.password, c: molecule-kea-api-pw }
+
+    - name: Config
+      ansible.builtin.copy:
+        dest: /etc/kea/kea-dhcp4.conf
+        owner: root
+        group: "{{ _grp }}"
+        mode: "0640"
+        content: "{{ {'Dhcp4': _dhcp4} | to_nice_json }}"
+      vars:
+        _http: { socket-type: http, socket-address: 127.0.0.1, socket-port: 8004 }
+        _auth:
+          authentication:
+            type: basic
+            realm: kea
+            directory: /etc/kea/api-creds
+            clients: [{ user-file: stork.user, password-file: stork.password }]
+        _dhcp4:
+          interfaces-config: { interfaces: [eth0], dhcp-socket-type: udp }
+          control-sockets: ["{{ _http | combine(_auth if test_kea_api_auth | bool else {}) }}"]
+          lease-database: { type: memfile, name: /var/lib/kea/kea-leases4.csv }
+          subnet4: [{ id: 1, subnet: 172.30.20.0/24, pools: [{ pool: 172.30.20.100 - 172.30.20.200 }] }]
+
+    - name: Start Kea
+      ansible.builtin.service:
+        name: "{{ _svc }}"
+        state: restarted
+        enabled: true

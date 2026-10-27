@@ -1,0 +1,34 @@
+---
+# Inputs: _stork_agent_register_cmd (argv prefix that runs `stork-agent`),
+#         _stork_agent_register_user (user to run it as).
+# Registration writes /var/lib/stork-agent/root-cert.pem: the marker.
+- name: Check whether the agent is registered
+  ansible.builtin.stat:
+    path: /var/lib/stork-agent/root-cert.pem
+  register: _stork_agent_registered
+
+- name: Register the agent with the Stork server
+  ansible.builtin.command:
+    argv: >-
+      {{ _stork_agent_register_cmd
+         + ['register', '--non-interactive',
+            '--server-url', stork_agent_server_url,
+            '--agent-host', stork_agent_address,
+            '--agent-port', stork_agent_port | string]
+         + (['--server-token', _stork_agent_token] if _stork_agent_token | length > 0 else [])
+         + (['--skip-tls-cert-verification'] if stork_agent_skip_tls_verify | bool else []) }}
+  become: true
+  become_user: "{{ _stork_agent_register_user }}"
+  when: not _stork_agent_registered.stat.exists
+  register: _stork_agent_register
+  changed_when: true
+  no_log: "{{ _stork_agent_token | length > 0 }}"
+  notify: Restart stork agent
+
+- name: Tell the operator the machine needs approval
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} registered WITHOUT a server token: approve it in
+      the Stork UI (Services -> Machines -> Unauthorized), comparing the token
+      with /var/lib/stork-agent/token.txt on the host.
+  when: _stork_agent_register is changed and _stork_agent_token | length == 0

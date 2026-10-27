@@ -1,9 +1,0 @@
----
-# Deploys Kea (HA) + optional Stork into a Kubernetes cluster (EKS, Talos,
-# anything conformant). Runs on the control node only; the inventory just
-# needs one host (localhost) carrying the k8s group_vars.
-- name: Kea on Kubernetes
-  hosts: kea_k8s
-  connection: local
-  gather_facts: false
-  roles: [kea_stork]

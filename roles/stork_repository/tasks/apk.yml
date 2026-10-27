@@ -1,0 +1,21 @@
+---
+- name: Fetch the repository signing key
+  ansible.builtin.get_url:
+    url: "{{ _stork_repository_url }}/{{ _key }}"
+    dest: "/etc/apk/keys/{{ stork_repository_name }}@isc-{{ _key | regex_replace('^rsa\\.(.*)\\.key$', '\\1') }}.rsa.pub"
+    mode: "0644"
+  vars:
+    _key: "{{ stork_repository_apk_keys[stork_repository_name] }}"
+
+- name: Add the apk repository
+  ansible.builtin.lineinfile:
+    path: /etc/apk/repositories
+    line: >-
+      {{ _stork_repository_url }}/alpine/v{{ ansible_facts['distribution_version'].split('.')[0:2] | join('.') }}/main
+  register: _stork_repository_apk
+
+# Must run now (packages are installed next), not at a handler flush.
+- name: Refresh the apk index  # noqa: no-handler
+  community.general.apk:
+    update_cache: true
+  when: _stork_repository_apk is changed

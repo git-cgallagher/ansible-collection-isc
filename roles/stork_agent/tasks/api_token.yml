@@ -1,0 +1,39 @@
+---
+# Runs on the control node, once per play.
+- name: Log in to the Stork API
+  ansible.builtin.uri:
+    url: "{{ stork_agent_api_url | regex_replace('/$', '') }}/api/sessions"
+    method: POST
+    body_format: json
+    body:
+      authenticationMethodId: internal
+      identifier: "{{ stork_agent_api_user }}"
+      secret: "{{ stork_agent_api_password }}"
+    validate_certs: "{{ not (stork_agent_skip_tls_verify | bool) }}"
+    status_code: [200]
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: _stork_agent_login
+  # The server may have only just started.
+  until: _stork_agent_login.status == 200
+  retries: 15
+  delay: 4
+  no_log: true
+
+- name: Read the server token
+  ansible.builtin.uri:
+    url: "{{ stork_agent_api_url | regex_replace('/$', '') }}/api/machines-server-token"
+    headers: { Cookie: "{{ _stork_agent_login.cookies_string }}" }
+    validate_certs: "{{ not (stork_agent_skip_tls_verify | bool) }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: _stork_agent_token_resp
+  no_log: true
+
+- name: Remember the token (run_once set_fact applies to every host)
+  ansible.builtin.set_fact:
+    _stork_agent_fetched_token: "{{ _stork_agent_token_resp.json.token }}"
+  run_once: true
+  no_log: true

@@ -1,4 +1,7 @@
 collections/
+.ansible/
+tests/output/
+*.tar.gz
 *.retry
-.vault-pass*
 .rendered/
+.molecule-collections/

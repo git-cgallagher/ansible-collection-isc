@@ -1,0 +1,68 @@
+---
+# Small local PostgreSQL for the Stork server. For production prefer a
+# managed/replicated PostgreSQL (RDS, CloudNativePG, ...) and set
+# stork_server_db_install_local: false — Stork's own availability is its database's.
+- name: Install PostgreSQL
+  ansible.builtin.package:
+    name: "{{ _stork_server_pg.packages }}"
+    state: present
+
+- name: Initialise the cluster (RPM / Alpine)
+  ansible.builtin.shell: |
+    set -e
+    if [ -n "$(find /var/lib/pgsql /var/lib/postgresql -name PG_VERSION -print 2>/dev/null)" ]; then
+      echo already; exit 0
+    fi
+    {{ 'postgresql-setup --initdb' if stork_repository_pkg_format == 'rpm' else '/etc/init.d/postgresql setup' }}
+  args:
+    executable: /bin/sh
+  register: _stork_server_pg_init
+  changed_when: "'already' not in _stork_server_pg_init.stdout"
+  when: stork_repository_pkg_format in ['rpm', 'apk']
+
+- name: Allow password auth for the Stork user over loopback (RPM default is ident)
+  ansible.builtin.lineinfile:
+    path: /var/lib/pgsql/data/pg_hba.conf
+    insertbefore: BOF
+    line: "host {{ stork_server_db_name }} {{ stork_server_db_user }} 127.0.0.1/32 scram-sha-256"
+  when: stork_repository_pkg_format == 'rpm'
+  register: _stork_server_pg_hba
+
+- name: Start PostgreSQL
+  ansible.builtin.service:
+    name: "{{ _stork_server_pg.service }}"
+    state: "{{ 'restarted' if _stork_server_pg_hba is changed else 'started' }}"
+    enabled: true
+
+- name: Wait for PostgreSQL
+  ansible.builtin.command: su -s /bin/sh postgres -c "psql -tAc 'select 1'"
+  register: _stork_server_pg_ready
+  until: _stork_server_pg_ready.rc == 0
+  retries: 15
+  delay: 2
+  changed_when: false
+
+# psql variables + format(%I/%L) quote identifiers and the password safely;
+# su without '-' keeps DB_* in the environment.
+- name: Create the Stork role, database and pgcrypto extension
+  ansible.builtin.shell: |
+    su -s /bin/sh postgres -c 'psql -X -q -tA -v ON_ERROR_STOP=1 -v u="$DB_USER" -v p="$DB_PASS" -v d="$DB_NAME" -f -' <<'SQL'
+    SELECT 'created-role' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'u');
+    SELECT format('CREATE ROLE %I LOGIN', :'u') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'u') \gexec
+    SELECT format('ALTER ROLE %I PASSWORD %L', :'u', :'p') \gexec
+    SELECT 'created-db' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'d');
+    SELECT format('CREATE DATABASE %I OWNER %I', :'d', :'u') WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'d') \gexec
+    \c :"d"
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    \echo bootstrap-done
+    SQL
+  args:
+    executable: /bin/sh
+  environment:
+    DB_USER: "{{ stork_server_db_user }}"
+    DB_NAME: "{{ stork_server_db_name }}"
+    DB_PASS: "{{ stork_server_db_password }}"
+  register: _stork_server_pg_bootstrap
+  changed_when: _stork_server_pg_bootstrap.stdout is search('created-(role|db)')
+  failed_when: _stork_server_pg_bootstrap.rc != 0 or 'bootstrap-done' not in _stork_server_pg_bootstrap.stdout
+  no_log: true

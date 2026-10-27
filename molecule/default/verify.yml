@@ -1,117 +1,46 @@
 ---
-- name: Verify Kea HA state
-  hosts: kea
-  gather_facts: false
-  tasks:
-    - name: Query HA status on each peer
-      ansible.builtin.uri:
-        url: http://127.0.0.1:8004/
-        method: POST
-        body_format: json
-        body: { command: status-get }
-      register: _st
-      until: >-
-        _st.json[0].arguments['high-availability'][0]['ha-servers'].local.state
-        in ['hot-standby', 'backup']
-      retries: 20
-      delay: 3
-
-    - name: Show states
-      ansible.builtin.debug:
-        msg: "{{ inventory_hostname }}: {{ _st.json[0].arguments['high-availability'][0]['ha-servers'].local }}"
-
-    - name: Primary and standby report hot-standby, backup reports backup
-      ansible.builtin.assert:
-        that: >-
-          _st.json[0].arguments['high-availability'][0]['ha-servers'].local.state
-          == ('backup' if inventory_hostname == 'kea3' else 'hot-standby')
-
-    - name: Read the rendered config
-      ansible.builtin.slurp:
-        src: /etc/kea/kea-dhcp4.conf
-      register: _conf
-
-    - name: Normalise this-server-name and hash
-      ansible.builtin.set_fact:
-        _conf_sum: >-
-          {{ _conf.content | b64decode
-             | regex_replace('"this-server-name": "kea[0-9]"', 'X') | hash('sha256') }}
-
-    - name: Rendered config is byte-identical across distros (except this-server-name)
-      ansible.builtin.assert:
-        that: (ansible_play_hosts | map('extract', hostvars, '_conf_sum') | unique | length) == 1
-      run_once: true
-
-    - name: Gather service state
-      ansible.builtin.service_facts:
-
-    - name: Stork agent is running
-      ansible.builtin.assert:
-        that: ansible_facts.services['isc-stork-agent.service'].state == 'running'
-
-- name: Verify Stork sees the machines
+- name: Verify Stork sees and can talk to both Kea daemons
   hosts: stork_server
   gather_facts: false
   tasks:
-    - name: Log in
+    - name: The bootstrap admin/admin login is refused
       ansible.builtin.uri:
         url: http://127.0.0.1:8080/api/sessions
         method: POST
         body_format: json
-        body: { authenticationMethodId: internal, identifier: admin, secret: molecule-Admin-pw-1 }
+        body: { authenticationMethodId: internal, identifier: admin, secret: admin }
+        status_code: [400, 401, 403]
+
+    - name: Log in with the rotated password
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/api/sessions
+        method: POST
+        body_format: json
+        body: { authenticationMethodId: internal, identifier: admin, secret: "{{ test_admin_password }}" }
       register: _login
 
-    - name: List authorized machines
+    - name: Both machines are authorized (unattended registration)
       ansible.builtin.uri:
         url: http://127.0.0.1:8080/api/machines?authorized=true
         headers: { Cookie: "{{ _login.cookies_string }}" }
       register: _machines
-      until: _machines.json.total | default(0) >= 3
+      until: _machines.json.total | default(0) == 2
       retries: 20
       delay: 3
 
-    - name: Show machines
-      ansible.builtin.debug:
-        msg: "{{ _machines.json['items'] | map(attribute='address') | list }}"
-
-- name: Verify failover (stop the primary, standby must take over, then recover)
-  hosts: kea2
-  gather_facts: false
-  vars:
-    _status_body: { command: status-get }
-  tasks:
-    - name: Stop the primary
-      ansible.builtin.systemd_service:
-        name: kea-dhcp4
-        state: stopped
-      delegate_to: kea1
-
-    - name: Standby transitions to partner-down and owns the primary's scope
+    # Active = the agent reached the daemon's API. On kea2 that requires the
+    # basic-auth credentials Stork read from the Kea config.
+    - name: Both DHCPv4 daemons are active and monitored
       ansible.builtin.uri:
-        url: http://127.0.0.1:8004/
-        method: POST
-        body_format: json
-        body: "{{ _status_body }}"
-      register: _st
+        url: http://127.0.0.1:8080/api/daemons
+        headers: { Cookie: "{{ _login.cookies_string }}" }
+      register: _daemons
       until: >-
-        _st.json[0].arguments['high-availability'][0]['ha-servers'].local.state == 'partner-down'
-        and 'kea1' in _st.json[0].arguments['high-availability'][0]['ha-servers'].local.scopes
+        _daemons.json['items'] | default([]) | selectattr('name', 'eq', 'dhcp4')
+        | selectattr('active') | selectattr('monitored') | list | length == 2
       retries: 30
-      delay: 2
+      delay: 4
 
-    - name: Start the primary again
-      ansible.builtin.systemd_service:
-        name: kea-dhcp4
-        state: started
-      delegate_to: kea1
-
-    - name: Pair returns to hot-standby
-      ansible.builtin.uri:
-        url: http://127.0.0.1:8004/
-        method: POST
-        body_format: json
-        body: "{{ _status_body }}"
-      register: _st2
-      until: _st2.json[0].arguments['high-availability'][0]['ha-servers'].local.state == 'hot-standby'
-      retries: 40
-      delay: 3
+    - name: Show daemons
+      ansible.builtin.debug:
+        msg: "{{ _daemons.json['items'] | map(attribute='label') | zip(_daemons.json['items'] | map(attribute='version')) | list }}"

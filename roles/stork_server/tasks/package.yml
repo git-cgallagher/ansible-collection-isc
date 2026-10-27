@@ -1,0 +1,61 @@
+---
+- name: Configure the ISC Stork repository
+  ansible.builtin.include_role:
+    name: git_cgallagher.stork.stork_repository
+
+- name: Pick the PostgreSQL packages
+  ansible.builtin.set_fact:
+    _stork_server_pg: >-
+      {{ _stork_server_postgresql_amazon if ansible_facts['distribution'] == 'Amazon'
+         else _stork_server_postgresql[stork_repository_pkg_format] }}
+
+- name: Local PostgreSQL
+  ansible.builtin.include_tasks: postgresql.yml
+  when: stork_server_db_install_local | bool
+
+- name: Install the Stork server
+  ansible.builtin.package:
+    name: "isc-stork-server{{ _pin }}"
+    state: present
+  vars:
+    # Stork's RPM version is 2.6.0.<build>, so pins are globs.
+    _pin: >-
+      {{ '' if stork_server_version | length == 0
+         else {'deb': '=', 'rpm': '-', 'apk': '~'}[stork_repository_pkg_format] ~ stork_server_version
+              ~ ('*' if stork_repository_pkg_format in ['deb', 'rpm'] else '') }}
+  notify: Restart stork server
+
+- name: Write server.env (contains the database password)
+  ansible.builtin.template:
+    src: server.env.j2
+    dest: /etc/stork/server.env
+    owner: root
+    group: stork-server
+    mode: "0640"
+  no_log: true
+  notify: Restart stork server
+
+- name: Enable and start the Stork server
+  ansible.builtin.service:
+    name: isc-stork-server
+    state: started
+    enabled: true
+
+- name: Apply pending restarts before probing the API
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the Stork REST API
+  ansible.builtin.uri:
+    url: "{{ _api }}/version"
+    validate_certs: false
+  vars:
+    _api: "{{ 'https' if stork_server_tls else 'http' }}://127.0.0.1:{{ stork_server_rest_port }}/api"
+  register: _stork_server_version
+  until: _stork_server_version.status == 200
+  retries: 30
+  delay: 2
+
+- name: Rotate the bootstrap admin password
+  ansible.builtin.include_tasks: rotate_admin.yml
+  vars:
+    _api: "{{ 'https' if stork_server_tls else 'http' }}://127.0.0.1:{{ stork_server_rest_port }}/api"

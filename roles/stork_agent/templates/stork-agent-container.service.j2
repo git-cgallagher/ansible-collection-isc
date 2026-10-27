@@ -1,0 +1,24 @@
+# Managed by Ansible (git_cgallagher.stork.stork_agent)
+[Unit]
+Description=ISC Stork agent (container)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Restart=on-failure
+RestartSec=5
+ExecStartPre=-{{ _stork_agent_runtime }} rm -f stork-agent
+# --pid host: the agent finds Kea by scanning /proc and reading the config
+# path from Kea's command line; SYS_PTRACE lets it read /proc/<pid>/cwd.
+ExecStart={{ _stork_agent_runtime }} run --rm --name stork-agent \
+  --network host --pid host --cap-add SYS_PTRACE \
+  --env-file /etc/stork/agent.env \
+{% for m in stork_agent_container_kea_mounts %}
+  -v {{ m }}:{{ m }}:ro \
+{% endfor %}
+  -v /var/lib/stork-agent:/var/lib/stork-agent \
+  {{ stork_agent_image }} stork-agent
+ExecStop={{ _stork_agent_runtime }} stop -t 10 stork-agent
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,85 @@
+---
+- name: Detect the container runtime
+  ansible.builtin.shell: |
+    set -e
+    for r in {{ (['podman', 'docker'] if stork_agent_container_runtime == 'auto' else [stork_agent_container_runtime]) | join(' ') }}; do
+      if command -v "$r" >/dev/null 2>&1; then command -v "$r"; exit 0; fi
+    done
+    exit 1
+  args:
+    executable: /bin/sh
+  register: _stork_agent_runtime_probe
+  changed_when: false
+  failed_when: _stork_agent_runtime_probe.rc not in [0, 1]
+
+- name: Require a container runtime
+  ansible.builtin.assert:
+    that: _stork_agent_runtime_probe.rc == 0
+    fail_msg: "No container runtime ({{ stork_agent_container_runtime }}) on {{ inventory_hostname }}."
+    quiet: true
+
+- name: Remember the runtime
+  ansible.builtin.set_fact:
+    _stork_agent_runtime: "{{ _stork_agent_runtime_probe.stdout | trim }}"
+
+# Changed only when the image ID moves: podman prints "Writing manifest"
+# even for an up-to-date image.
+- name: Pull the Stork agent image
+  ansible.builtin.shell: |
+    set -eu
+    before=$({{ _stork_agent_runtime }} image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG" 2>/dev/null || true)
+    {{ _stork_agent_runtime }} pull -q "$IMG" >/dev/null
+    after=$({{ _stork_agent_runtime }} image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG")
+    [ "$before" = "$after" ] && echo unchanged || echo updated
+  args:
+    executable: /bin/sh
+  environment:
+    IMG: "{{ stork_agent_image }}"
+  register: _stork_agent_pull
+  when: stork_agent_container_pull | bool
+  changed_when: "'updated' in _stork_agent_pull.stdout"
+  notify: Restart stork agent
+
+- name: Create the agent's directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop: [/etc/stork, /var/lib/stork-agent]
+
+- name: Write agent.env
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: /etc/stork/agent.env
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart stork agent
+
+- name: Register
+  ansible.builtin.include_tasks: register.yml
+  vars:
+    _stork_agent_register_cmd: >-
+      {{ [_stork_agent_runtime, 'run', '--rm', '--network', 'host',
+          '-v', '/var/lib/stork-agent:/var/lib/stork-agent', stork_agent_image, 'stork-agent'] }}
+    _stork_agent_register_user: root
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: stork-agent-container.service.j2
+    dest: /etc/systemd/system/isc-stork-agent.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: [Reload systemd, Restart stork agent]
+
+- name: Apply unit changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the Stork agent
+  ansible.builtin.systemd_service:
+    name: isc-stork-agent
+    state: started
+    enabled: true

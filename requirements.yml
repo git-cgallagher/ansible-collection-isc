@@ -1,8 +1,6 @@
 ---
 collections:
-  - name: kubernetes.core      # kubernetes mode (also needs `pip install kubernetes`)
+  - name: kubernetes.core      # kubernetes mode (also: pip install kubernetes)
     version: ">=5.0.0"
   - name: community.general    # apk module (Alpine)
     version: ">=9.0.0"
-  - name: community.docker     # molecule tests only
-    version: ">=4.0.0"

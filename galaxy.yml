@@ -1,0 +1,33 @@
+namespace: git_cgallagher
+name: stork
+version: 1.0.0
+readme: README.md
+authors:
+  - Chris Gallagher (@git-cgallagher)
+description: >-
+  Deploy ISC Stork (server and agent) to monitor ISC Kea DHCP on VMs,
+  container hosts and Kubernetes (EKS, Talos). Kea itself is out of scope.
+license:
+  - MIT
+tags:
+  - stork
+  - kea
+  - dhcp
+  - isc
+  - monitoring
+  - kubernetes
+dependencies: {}
+repository: https://github.com/git-cgallagher/ansible-collection-stork
+documentation: https://github.com/git-cgallagher/ansible-collection-stork#readme
+issues: https://github.com/git-cgallagher/ansible-collection-stork/issues
+build_ignore:
+  - .github
+  - .ansible
+  - collections
+  - molecule
+  - .molecule-collections
+  - tests/output
+  - '*.tar.gz'
+  - .ansible-lint
+  - .yamllint
+  - AGENTS.md

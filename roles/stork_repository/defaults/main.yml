@@ -1,0 +1,15 @@
+---
+# ISC Cloudsmith repository: "stork" carries stable releases (even minors:
+# 2.4, 2.6); "stork-dev" carries development releases (odd minors).
+stork_repository_name: stork
+stork_repository_base_url: https://dl.cloudsmith.io/public/isc
+# Cloudsmith entitlement token for ISC's private (-prv) repos. Keep it in
+# ansible-vault. Empty = public repos.
+stork_repository_cloudsmith_token: ""
+# Apk signing-key file names per repo (Alpine only). apk matches the key by
+# FILE NAME (<repo>@isc-<KEYID>.rsa.pub); the generic /rsa.key URL serves
+# the PGP key instead. IDs read from ISC's setup.alpine.sh on 2026-10-27;
+# override here if ISC rotates them.
+stork_repository_apk_keys:
+  stork: rsa.6914F776A579B428.key
+  stork-dev: rsa.BF2C56ECBA97B498.key

@@ -1,0 +1,72 @@
+{%- set labels = {'app.kubernetes.io/name': 'stork-server', 'app.kubernetes.io/managed-by': 'git_cgallagher.stork'} -%}
+{% if stork_server_k8s_create_namespace | bool %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ stork_server_k8s_namespace }}
+  labels: {{ {'app.kubernetes.io/managed-by': 'git_cgallagher.stork'} | to_json }}
+{% endif %}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: stork-server-env
+  namespace: {{ stork_server_k8s_namespace }}
+  labels: {{ labels | to_json }}
+type: Opaque
+stringData: {{ ({
+    'STORK_DATABASE_HOST': stork_server_db_host,
+    'STORK_DATABASE_PORT': stork_server_db_port | string,
+    'STORK_DATABASE_NAME': stork_server_db_name,
+    'STORK_DATABASE_USER_NAME': stork_server_db_user,
+    'STORK_DATABASE_PASSWORD': stork_server_db_password,
+    'STORK_DATABASE_SSLMODE': stork_server_db_sslmode,
+    'STORK_REST_HOST': '0.0.0.0',
+    'STORK_REST_PORT': stork_server_rest_port | string,
+    'STORK_REST_STATIC_FILES_DIR': '/usr/share/stork/www',
+    'STORK_SERVER_ENABLE_METRICS': stork_server_enable_metrics | bool | lower} | combine(stork_server_extra_env)) | to_json }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stork-server
+  namespace: {{ stork_server_k8s_namespace }}
+  labels: {{ labels | to_json }}
+  annotations: {{ stork_server_k8s_service_annotations | to_json }}
+spec:
+  type: {{ stork_server_k8s_service_type }}
+  selector: { app.kubernetes.io/name: stork-server }
+  ports:
+    - { name: http, port: {{ stork_server_rest_port }}, targetPort: {{ stork_server_rest_port }}, protocol: TCP }
+---
+# Single replica: Stork keeps all state in PostgreSQL, so its availability
+# is the database's (RDS Multi-AZ, CloudNativePG, ...).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stork-server
+  namespace: {{ stork_server_k8s_namespace }}
+  labels: {{ labels | to_json }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: stork-server }
+  template:
+    metadata:
+      labels: {{ labels | to_json }}
+      annotations:
+        stork.isc.org/env-checksum: {{ (stork_server_db_password ~ stork_server_db_host ~ (stork_server_extra_env | to_json)) | hash('sha256') | truncate(16, True, '') | to_json }}
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: stork-server
+          image: {{ stork_server_k8s_image }}
+          command: [stork-server]
+          envFrom: [{ secretRef: { name: stork-server-env } }]
+          ports: [{ name: http, containerPort: {{ stork_server_rest_port }} }]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+          readinessProbe: { httpGet: { path: /api/version, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /api/version, port: http }, initialDelaySeconds: 30, periodSeconds: 20 }
+          resources: {{ stork_server_k8s_resources | to_json }}

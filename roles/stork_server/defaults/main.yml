@@ -1,0 +1,51 @@
+---
+# package    — ISC packages on this host (Debian/Ubuntu, EL 8–10, Fedora,
+#              Amazon Linux 2023, Alpine), systemd or OpenRC
+# kubernetes — Deployment + Service + Secret applied from the control node
+stork_server_deploy_mode: package
+
+# Exact version to pin, e.g. "2.6.0". Empty = latest in the repository.
+stork_server_version: ""
+
+stork_server_rest_host: 0.0.0.0
+stork_server_rest_port: 8080
+# { cert: /etc/stork/tls/server.pem, key: /etc/stork/tls/server.key, ca: ... }
+stork_server_tls: {}
+stork_server_enable_metrics: false   # /metrics has NO authentication
+stork_server_extra_env: {}           # extra STORK_* settings (e.g. OIDC)
+
+# PostgreSQL (>= 10, with pgcrypto). Stork keeps all state there, so its
+# availability is the database's.
+#   true  — install PostgreSQL on this host and create role/db/extension
+#   false — use an existing server (RDS, CloudNativePG, ...); the database,
+#           user and pgcrypto must already exist
+stork_server_db_install_local: true
+stork_server_db_host: localhost
+stork_server_db_port: 5432
+stork_server_db_name: stork
+stork_server_db_user: stork
+stork_server_db_password: ""   # REQUIRED — vault it
+stork_server_db_sslmode: "{{ 'disable' if (stork_server_db_install_local | bool) else 'require' }}"
+
+# Stork boots with admin/admin. Set a password to have the role rotate it.
+stork_server_admin_user: admin
+stork_server_admin_password: ""   # vault it
+stork_server_admin_bootstrap_password: admin
+
+# --- kubernetes mode ---
+stork_server_k8s_namespace: stork
+stork_server_k8s_create_namespace: true
+stork_server_k8s_kubeconfig: ""     # "" = $KUBECONFIG / ~/.kube/config
+stork_server_k8s_context: ""
+stork_server_k8s_state: present     # present | absent
+stork_server_k8s_apply: true        # false = render only
+stork_server_k8s_render_dir: ""     # also write manifests here (review / GitOps)
+stork_server_k8s_image: ""          # REQUIRED: ISC publishes none; see docker/Dockerfile.stork-server
+stork_server_k8s_service_type: ClusterIP
+stork_server_k8s_service_annotations: {}
+stork_server_k8s_resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { memory: 512Mi }
+# URL the CONTROL NODE uses to reach the API for the password rotation
+# (ingress, LoadBalancer or a port-forward). Empty = skip the rotation.
+stork_server_k8s_api_url: ""

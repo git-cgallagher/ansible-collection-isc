@@ -1,0 +1,27 @@
+---
+- name: Check inputs
+  ansible.builtin.assert:
+    that:
+      - stork_agent_deploy_mode in ['package', 'container', 'kubernetes']
+      - stork_agent_server_url | length > 0
+      - stork_agent_deploy_mode == 'package' or stork_agent_image | length > 0
+      - >-
+        stork_agent_deploy_mode != 'kubernetes' or not (stork_agent_k8s_manage_secret | bool)
+        or stork_agent_k8s_namespace | length > 0
+    fail_msg: >-
+      Need stork_agent_server_url; stork_agent_image outside package mode
+      (ISC publishes none: build docker/Dockerfile.stork-agent); and
+      stork_agent_k8s_namespace when the role manages the token Secret.
+    quiet: true
+
+- name: Read the server token from the Stork API
+  ansible.builtin.include_tasks: api_token.yml
+  when: stork_agent_server_token | length == 0 and stork_agent_api_password | length > 0
+
+- name: Set the token to register with
+  ansible.builtin.set_fact:
+    _stork_agent_token: "{{ stork_agent_server_token or (_stork_agent_fetched_token | default('')) }}"
+  no_log: true
+
+- name: "Deploy ({{ stork_agent_deploy_mode }})"
+  ansible.builtin.include_tasks: "{{ stork_agent_deploy_mode }}.yml"

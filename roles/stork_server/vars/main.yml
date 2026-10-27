@@ -1,0 +1,7 @@
+---
+_stork_server_postgresql:
+  deb: { packages: [postgresql, postgresql-contrib], service: postgresql }
+  rpm: { packages: [postgresql-server, postgresql-contrib], service: postgresql }
+  apk: { packages: [postgresql, postgresql-contrib], service: postgresql }
+# Amazon Linux 2023 ships versioned PostgreSQL packages.
+_stork_server_postgresql_amazon: { packages: [postgresql16-server, postgresql16-contrib], service: postgresql }

@@ -1,0 +1,65 @@
+---
+- name: Configure the ISC Stork repository
+  ansible.builtin.include_role:
+    name: git_cgallagher.stork.stork_repository
+
+- name: Install the Stork agent
+  ansible.builtin.package:
+    name: "isc-stork-agent{{ _pin }}"
+    state: present
+  vars:
+    # Stork's RPM version is 2.6.0.<build>, so pins are globs.
+    _pin: >-
+      {{ '' if stork_agent_version | length == 0
+         else {'deb': '=', 'rpm': '-', 'apk': '~'}[stork_repository_pkg_format] ~ stork_agent_version
+              ~ ('*' if stork_repository_pkg_format in ['deb', 'rpm'] else '') }}
+  notify: Restart stork agent
+
+- name: Look up Kea's group
+  ansible.builtin.getent:
+    database: group
+  when: stork_agent_kea_group | length == 0
+
+- name: Pick Kea's group
+  ansible.builtin.set_fact:
+    _stork_agent_kea_group: >-
+      {{ stork_agent_kea_group if stork_agent_kea_group | length > 0
+         else (['_kea', 'kea'] | select('in', ansible_facts.getent_group | default({})) | first | default('')) }}
+
+- name: Require Kea to be installed first
+  ansible.builtin.assert:
+    that: _stork_agent_kea_group | length > 0
+    fail_msg: >-
+      No Kea group (_kea / kea) on {{ inventory_hostname }}. Install Kea before
+      the Stork agent, or set stork_agent_kea_group.
+    quiet: true
+
+# Read access to Kea's config, logs and API password files (Stork reads the
+# credentials straight from the daemon's config).
+- name: Add the agent to Kea's group
+  ansible.builtin.user:
+    name: stork-agent
+    groups: "{{ _stork_agent_kea_group }}"
+    append: true
+  notify: Restart stork agent
+
+- name: Write agent.env
+  ansible.builtin.template:
+    src: agent.env.j2
+    dest: /etc/stork/agent.env
+    owner: root
+    group: stork-agent
+    mode: "0640"
+  notify: Restart stork agent
+
+- name: Register
+  ansible.builtin.include_tasks: register.yml
+  vars:
+    _stork_agent_register_cmd: [stork-agent]
+    _stork_agent_register_user: stork-agent
+
+- name: Enable and start the Stork agent
+  ansible.builtin.service:
+    name: isc-stork-agent
+    state: started
+    enabled: true

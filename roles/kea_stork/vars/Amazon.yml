@@ -1,8 +1,0 @@
----
-# Amazon Linux 2023. ISC publishes no AL2023 repo; the EL9 RPMs install fine
-# once log4cplus is available (verified 2026-10-27 with Kea 3.0.4 + Stork
-# 2.6.0, aarch64). Inherits everything else from RedHat.yml.
-_kea_rpm_distro: el
-_kea_rpm_release: "9"
-_kea_epel_release: "9"
-_stork_postgresql_packages: [postgresql16-server, postgresql16-contrib]

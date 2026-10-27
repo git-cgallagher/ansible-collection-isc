@@ -1,6 +1,0 @@
----
-stork_server_url: http://10.0.0.20:8080
-stork_version: "2.6.0"
-# Vault these (ansible-vault encrypt_string ...):
-stork_db_password: "{{ vault_stork_db_password }}"
-stork_admin_password: "{{ vault_stork_admin_password }}"   # lets the role fetch the server token

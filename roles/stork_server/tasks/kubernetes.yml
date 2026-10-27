@@ -1,0 +1,50 @@
+---
+- name: Stork server on Kubernetes
+  run_once: true
+  delegate_to: localhost
+  become: false
+  vars:
+    _docs: "{{ lookup('ansible.builtin.template', 'k8s/server.yaml.j2') | from_yaml_all | select | list }}"
+  block:
+    - name: Write the manifests
+      ansible.builtin.copy:
+        dest: "{{ stork_server_k8s_render_dir }}/stork-server.yaml"
+        # Every document starts with '---' so files can be concatenated.
+        content: "{{ _docs | map('to_nice_yaml', indent=2) | map('regex_replace', '^', '---\n') | join('') }}"
+        mode: "0600"   # contains the database password
+      when: stork_server_k8s_render_dir | length > 0
+      no_log: true
+
+    - name: Apply the Stork server objects
+      kubernetes.core.k8s:
+        kubeconfig: "{{ stork_server_k8s_kubeconfig | default(omit, true) }}"
+        context: "{{ stork_server_k8s_context | default(omit, true) }}"
+        state: "{{ stork_server_k8s_state }}"
+        definition: "{{ item }}"
+        apply: "{{ stork_server_k8s_state == 'present' }}"
+      loop: "{{ _docs if stork_server_k8s_state == 'present' else _docs | reverse | list }}"
+      loop_control:
+        label: "{{ item.kind }}/{{ item.metadata.name }}"
+      no_log: "{{ item.kind == 'Secret' }}"
+      when: stork_server_k8s_apply | bool
+
+    - name: Wait for the Stork server pod
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ stork_server_k8s_kubeconfig | default(omit, true) }}"
+        context: "{{ stork_server_k8s_context | default(omit, true) }}"
+        kind: Pod
+        namespace: "{{ stork_server_k8s_namespace }}"
+        label_selectors: [app.kubernetes.io/name=stork-server]
+        wait: true
+        wait_condition: { type: Ready, status: "True" }
+        wait_timeout: 300
+      when: stork_server_k8s_state == 'present' and stork_server_k8s_apply | bool
+
+    # Dynamic includes don't inherit block keywords: pass them via apply.
+    - name: Rotate the bootstrap admin password
+      ansible.builtin.include_tasks:
+        file: rotate_admin.yml
+        apply: { delegate_to: localhost, run_once: true, become: false }
+      vars:
+        _api: "{{ stork_server_k8s_api_url | regex_replace('/$', '') }}/api"
+      when: stork_server_k8s_state == 'present' and stork_server_k8s_apply | bool and stork_server_k8s_api_url | length > 0

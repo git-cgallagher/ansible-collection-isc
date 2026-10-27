@@ -1,5 +1,0 @@
-kea_k8s:
-  hosts:
-    localhost:
-      ansible_connection: local
-      ansible_python_interpreter: "{{ ansible_playbook_python }}"   # needs the kubernetes pip package

@@ -1,0 +1,59 @@
+name: ansible-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 13 * * 2'   # weekly, catches ISC package and ansible-core drift
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sanity:
+    name: sanity (${{ matrix.ansible-core-version }})
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.ansible-core-version == 'devel' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ansible-core-version: [stable-2.18, stable-2.19, stable-2.20, stable-2.21, devel]
+    steps:
+      - uses: ansible-community/ansible-test-gh-action@release/v1
+        with:
+          ansible-core-version: ${{ matrix.ansible-core-version }}
+          testing-type: sanity
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install ansible-lint yamllint
+      - run: yamllint .
+      - run: ansible-lint
+
+  molecule:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - run: pip install "ansible-core>=2.18,<2.22" molecule "molecule-plugins[docker]"
+      - name: Expose the checkout as git_cgallagher.stork
+        run: |
+          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
+          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/stork
+      - run: molecule test
+        env:
+          PY_COLORS: '1'
+          ANSIBLE_FORCE_COLOR: '1'

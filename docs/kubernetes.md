@@ -1,114 +1,84 @@
-# Kea on Kubernetes (EKS, Talos, any conformant cluster)
+# Stork on Kubernetes
 
-`kea_deploy_mode: kubernetes` renders plain manifests and applies them with
-`kubernetes.core.k8s` from the control node. The same variables work on
-EKS and Talos; `kea_k8s_profile` changes only:
+## Server
 
-| Concern | `eks` | `talos` | `generic` |
-|---|---|---|---|
-| DHCP load balancer | AWS Load Balancer Controller NLB (`loadBalancerClass: service.k8s.aws/nlb`, IP targets, internal, TCP health check) | MetalLB annotation (`metallb.io/loadBalancerIPs`) or Cilium LB-IPAM (`lbipam.cilium.io/ips`) via `kea_k8s_lb_implementation` | plain `LoadBalancer` |
-| Lease storage | PVC (cluster default StorageClass) | `emptyDir` (Talos ships no StorageClass; HA resyncs leases) | PVC |
-| Pod Security label | set explicitly (EKS enforces nothing by default) | set explicitly (Talos enforces `baseline` by default) | set explicitly |
+`stork_server_deploy_mode: kubernetes` applies a Namespace (optional),
+Secret, Service and a single-replica Deployment from the control node. It
+needs an image (`docker/Dockerfile.stork-server`) and an external PostgreSQL
+with `pgcrypto`: RDS on EKS, CloudNativePG or similar on Talos.
 
-## Topology
+To rotate the `admin`/`admin` bootstrap password, set
+`stork_server_admin_password` and a `stork_server_k8s_api_url` the control
+node can reach (ingress, LoadBalancer, or `kubectl port-forward`).
+`stork_server_k8s_apply: false` together with `stork_server_k8s_render_dir`
+only writes the manifests, for review or GitOps. That file holds the DB
+password, so treat it like a Secret.
 
-```
-relay agents ──UDP/67──▶ LB kea-kea1-dhcp ──▶ pod kea-kea1-0 ─┐  HA over pinned
-            └─UDP/67──▶ LB kea-kea2-dhcp ──▶ pod kea-kea2-0 ─┘  ClusterIPs :8001
-                                              │  shareProcessNamespace
-                                              └─ stork-agent sidecar ──▶ stork-server ──▶ PostgreSQL
-```
+## Agent as a sidecar
 
-- **One StatefulSet per HA peer**, each with `replicas: 1`. HA runs between
-  the StatefulSets, not between replicas, because every peer needs its own
-  `this-server-name` and role.
-- **Pinned ClusterIPs.** Kea HA URLs must be IP literals and pod IPs change,
-  so each peer has a Service with a fixed `spec.clusterIP`
-  (`kea_k8s_peers[].cluster_ip`). Choose free addresses in the cluster's
-  **service** CIDR. EKS defaults to `10.100.0.0/16` or `172.20.0.0/16`, Talos
-  to `10.96.0.0/12`, and k3s to `10.43.0.0/16`.
-- **A pod's own peer URL is `0.0.0.0`.** Kea binds the HA listener to the host
-  in its own URL, and a pod can't bind its Service IP. Partners point at each
-  other's ClusterIP. Verified: asymmetric URLs pair up fine.
-- **Relayed DHCP only.** Pods never see L2 broadcasts, so the role forces
-  `dhcp-socket-type: udp`. Configure **every relay with both peers' LB
-  addresses**, as for any DHCP HA pair; HA state decides which peer answers.
-  Kea sends replies to `giaddr` straight from the pod, so the relay must be
-  routable from the pod network. On EKS with the VPC CNI that holds, because
-  pod IPs are VPC IPs.
-- **Rollouts go one peer at a time.** The role applies `kea1`, waits for
-  Ready, then applies `kea2`, so a config change never restarts both
-  partners. A config checksum annotation forces the roll.
+The agent must live **in the Kea pod**. This collection doesn't deploy Kea,
+so `stork_agent_deploy_mode: kubernetes` doesn't apply a workload. Instead it:
 
-## EKS checklist
+1. sets two facts, `stork_agent_k8s_containers` (the sidecar) and
+   `stork_agent_k8s_volumes` (its state volume);
+2. optionally applies a Secret holding the registration token
+   (`stork_agent_k8s_manage_secret`, in `stork_agent_k8s_namespace`).
 
-- Install the AWS Load Balancer Controller. The in-tree controller can't do
-  UDP with IP targets.
-- NLB UDP target groups always preserve the client IP. The health check is TCP
-  on the HA port (8001), or the Stork agent port when HA is off.
-- Graviton nodes: ISC's images are amd64-only. Build `files/Dockerfile.kea`
-  for `linux/arm64`, push to ECR, and set `kea_dhcp4_image`. Otherwise pin
-  `kea_k8s_node_selector: {kubernetes.io/arch: amd64}`.
-- NetworkPolicy only takes effect when VPC CNI network policy is enabled
-  (`enableNetworkPolicy: "true"` on the add-on).
-- Stork DB: use RDS PostgreSQL. `pgcrypto` is available; create the DB, user
-  and extension first, and set `stork_db_sslmode: require`.
+Your Kea role puts the facts into its pod template, and the pod must also set
+**`shareProcessNamespace: true`**.
 
-## Talos checklist
-
-- Talos has no cloud LB. Run MetalLB (L2/BGP) or Cilium LB-IPAM, and give each
-  peer a fixed IP with `kea_k8s_lb_ips`.
-- **The default CNI (Flannel) does not enforce NetworkPolicy.** Use Cilium or
-  Calico if you rely on `kea_k8s_network_policy`.
-- PSA: Talos enforces `baseline` cluster-wide. The Kea containers are
-  baseline-compliant. The Stork sidecar (SYS_PTRACE) and `hostnetwork`
-  exposure need `privileged`, and the role labels the namespace for that
-  automatically.
-- For `hostnetwork` exposure (pods bind the node's NIC directly, with no LB),
-  pin peers to dedicated nodes with `kea_k8s_node_selector`/tolerations. The
-  pinned ClusterIPs still carry HA traffic.
-
-## Images
-
-ISC publishes amd64-only Kea images and no Stork images. Build all three from
-`roles/kea_stork/files/` for both architectures:
-
-```bash
-cd roles/kea_stork/files
-docker buildx build --platform linux/amd64,linux/arm64 --build-arg KEA_VERSION=3.0.4 -t REGISTRY/kea:3.0.4 -f Dockerfile.kea --push .
-docker buildx build --platform linux/amd64,linux/arm64 --build-arg STORK_VERSION=2.6.0 --build-arg KEA_VERSION=3.0.4 -t REGISTRY/stork-agent:2.6.0-kea3.0.4 -f Dockerfile.stork-agent --push .
-docker buildx build --platform linux/amd64,linux/arm64 --build-arg STORK_VERSION=2.6.0 -t REGISTRY/stork-server:2.6.0 -f Dockerfile.stork-server --push .
+```yaml
+- hosts: localhost
+  connection: local
+  roles:
+    - role: git_cgallagher.stork.stork_agent
+      vars:
+        stork_agent_deploy_mode: kubernetes
+        stork_agent_image: registry.example/stork-agent:2.6.0-kea3.0.4
+        stork_agent_server_url: http://stork-server.stork.svc.cluster.local:8080
+        stork_agent_server_token: "{{ vault_stork_server_token }}"
+        stork_agent_k8s_namespace: kea-dhcp
+        # Mirror the Kea container's mounts: same volume names, same paths.
+        stork_agent_k8s_volume_mounts:
+          - { name: config, mountPath: /etc/kea, readOnly: true }
+    - role: kea_dhcp
+      vars:
+        kea_dhcp_k8s_extra_containers: "{{ stork_agent_k8s_containers }}"
+        kea_dhcp_k8s_extra_volumes: "{{ stork_agent_k8s_volumes }}"
 ```
 
-The Stork agent image **includes the Kea binaries**. The agent identifies a
-daemon by running `kea-dhcp4 -v` from its own filesystem. Keep its
-`KEA_VERSION` equal to the Kea image's.
+### Rules the sidecar depends on
 
-## Stork in-cluster
+- **Same paths as Kea.** The agent opens the config path from Kea's command
+  line, then the API password files it names. Every one of those paths must
+  exist in the sidecar. With `kea_dhcp`, which mounts each file from its
+  `config` Secret with a `subPath`, copy those `volumeMounts` (config files and
+  `api-creds/*`) into `stork_agent_k8s_volume_mounts`.
+- **A `stork…` API client.** Give Kea an API client whose user name starts
+  with `stork`; the agent picks it automatically.
+- **Pod Security `privileged`** on Kea's namespace, for `SYS_PTRACE`.
+- **Agent address.** The default, `$(POD_IP)`, works for an in-cluster server,
+  but every pod restart registers a new machine and leaves the old entry
+  behind. Use a stable per-pod Service name when Kea has one, for example
+  `stork_agent_k8s_address: "$(POD_NAME).kea-headless.kea-dhcp.svc"`.
+- **Image.** `docker/Dockerfile.stork-agent` bundles Kea's binaries, because
+  the agent runs `kea-dhcp4 -v` from its own filesystem. Keep its
+  `KEA_VERSION` equal to the Kea image's.
 
-- `kea_k8s_stork_server_enabled: true` deploys one `stork-server` replica
-  against an external PostgreSQL (`stork_db_host`).
-- Agents register to `stork_server_url`, normally the in-cluster Service.
-  Each agent advertises `kea-<peer>.<ns>.svc.cluster.local`; override that
-  with `kea_k8s_stork_agent_addresses` for an out-of-cluster server.
-- **Unattended registration:** give `stork_server_token` directly, or set
-  `stork_admin_password` plus a `stork_api_url` the *control node* can reach
-  (an ingress, LB, or `kubectl port-forward`). The role then reads the token
-  after the server is up and stores it in the `kea-stork-agent` Secret.
-  Without either, approve machines in the UI.
-- The same `stork_api_url` + `stork_admin_password` also **rotate the
-  in-cluster server's `admin`/`admin` bootstrap password**. That happens on
-  the first run after the server comes up and is skipped afterwards. The URL
-  must be reachable from the control node *during* the play, between "Wait
-  for the in-cluster Stork server" and the per-peer rollout. For an
-  out-of-cluster Stork server it just has to be reachable at play time.
+### Status with `kea_dhcp`
 
-## Operational gotchas
+`kea_dhcp` exposes `kea_dhcp_k8s_extra_containers` and `_extra_volumes`
+but **not `shareProcessNamespace`** (as of 2026-10-27). Until it does, the
+sidecar starts but can't see Kea's process. That one switch is all that's
+needed on the Kea side.
 
-- A StatefulSet rolling update **won't replace a pod in CrashLoopBackOff**.
-  After fixing the spec, run `kubectl -n dhcp delete pod kea-<peer>-0`.
-- On a single-node test cluster (k3s servicelb), the second peer's UDP/67
-  LoadBalancer stays `<pending>`, because the port is already taken on that
-  node. Real clusters give each LB its own IP.
-- Remove everything with `kea_k8s_state: absent`. PVCs from
-  `volumeClaimTemplates` are kept, as is normal for StatefulSets.
+## EKS / Talos notes
+
+- **EKS:** expose the server with `stork_server_k8s_service_type:
+  LoadBalancer` plus AWS Load Balancer Controller annotations
+  (`stork_server_k8s_service_annotations`), or through an Ingress. For RDS,
+  `stork_server_db_sslmode: require` is the default for external databases.
+- **Talos:**
+  - Label Kea's namespace `pod-security.kubernetes.io/enforce: privileged`.
+  - Use MetalLB or Cilium if the server needs a LoadBalancer.
+  - Flannel (the default CNI) doesn't enforce NetworkPolicy.
