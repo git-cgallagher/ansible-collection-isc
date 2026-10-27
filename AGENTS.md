@@ -63,6 +63,10 @@ molecule test                     # package installs on 5 distros (amd64; slow u
 - Molecule on Apple silicon: a locally cached arm64 tag (e.g. `alpine:3.22`) blocks creating the
   amd64 container — `docker pull --platform linux/amd64 <image>` first.
 
+- Galaxy's role importer takes `galaxy_info.namespace` **verbatim** as the legacy namespace
+  (`overriding namespace name via metadata`). It must be exactly `git-cgallagher`; `cgallagher`
+  and `git_cgallagher` fail with "legacy namespace … does not exist". Lint accepts the hyphen.
+
 ## TODO / follow-ups
 - `kea-admin` schema management is untested against a live MySQL/PostgreSQL.
 - Molecule cannot start services (no init in containers); service start is untested in CI.
