@@ -234,7 +234,7 @@ A config checksum annotation rolls the pod whenever the configuration changes.
 
 ## Testing
 
-CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. To run the same checks locally, you need the following installed:
+CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. When all of them pass on a merge to `main`, a final job imports the role to Ansible Galaxy, using the `GALAXY_API_KEY` repository secret. To run the same checks locally, you need the following installed:
 
 - **`tests/run.sh`**: `ansible-core`, `kubernetes.core`, PyYAML, `openssl` and Docker. On Apple silicon, Docker also needs amd64 emulation.
 - **Molecule**: `molecule`, `molecule-plugins[docker]`, the `docker` Python SDK and the `community.docker` collection.

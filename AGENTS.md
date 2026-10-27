@@ -2,7 +2,8 @@
 
 Standalone Ansible role `kea_dhcp` (Galaxy: `git-cgallagher.kea_dhcp`). **Public** repo
 https://github.com/git-cgallagher/ansible-role-kea-dhcp (secret scanning + push protection +
-Dependabot security updates on). Galaxy: `git-cgallagher.kea_dhcp` (imported from `main`; re-import after releases). Work on branches + PRs.
+Dependabot security updates on). Galaxy: `git-cgallagher.kea_dhcp`, re-imported automatically by CI's `galaxy-import` job after
+every green merge to `main` (repo secret `GALAXY_API_KEY`; set by the owner, never by an agent). Work on branches + PRs.
 
 ## Layout
 - `defaults/main.yml` — public interface, documented inline. `meta/argument_specs.yml` — the
