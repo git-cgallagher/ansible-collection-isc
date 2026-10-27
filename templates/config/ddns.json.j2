@@ -1,0 +1,46 @@
+{#- Builds the DhcpDdns object (kea-dhcp-ddns / D2) as JSON. Forward/reverse
+    zones and TSIG keys come from kea_dhcp_ddns_settings. -#}
+{%- import 'config/_macros.j2' as m with context -%}
+{%- set cfg = {'ip-address': '127.0.0.1', 'port': 53001} -%}
+{%- set unix_sock = {'socket-type': 'unix', 'socket-name': m.socket_path('ddns')} -%}
+{%- if kea_dhcp__v3 | bool -%}
+{%-   set ns = namespace(socks=[]) -%}
+{%-   if kea_dhcp_unix_control_socket | bool -%}
+{%-     set ns.socks = ns.socks + [unix_sock] -%}
+{%-   endif -%}
+{%-   if kea_dhcp_api_http_enabled | bool -%}
+{%-     set http = {
+          'socket-type': ('https' if kea_dhcp_api_tls | length > 0 else 'http'),
+          'socket-address': kea_dhcp_api_http_address,
+          'socket-port': kea_dhcp_api_ports['ddns']} | combine(kea_dhcp_api_tls) -%}
+{%-     if kea_dhcp_api_auth_clients | length > 0 -%}
+{%-       set ns2 = namespace(clients=[]) -%}
+{%-       for c in kea_dhcp_api_auth_clients -%}
+{%-         set ns2.clients = ns2.clients + [{'user-file': c.user ~ '.user', 'password-file': c.user ~ '.password'}] -%}
+{%-       endfor -%}
+{%-       set http = http | combine({'authentication': {
+            'type': 'basic', 'realm': kea_dhcp_api_auth_realm,
+            'directory': kea_dhcp_api_auth_dir, 'clients': ns2.clients}}) -%}
+{%-     endif -%}
+{%-     set ns.socks = ns.socks + [http | combine(kea_dhcp_api_http_extra, recursive=true)] -%}
+{%-   endif -%}
+{%-   if ns.socks | length > 0 -%}
+{%-     set cfg = cfg | combine({'control-sockets': ns.socks}) -%}
+{%-   endif -%}
+{%- elif kea_dhcp_unix_control_socket | bool or kea_dhcp__ctrl_agent | bool -%}
+{%-   set cfg = cfg | combine({'control-socket': unix_sock}) -%}
+{%- endif -%}
+{%- set cfg = cfg | combine({'loggers': kea_dhcp_loggers if kea_dhcp_loggers | length > 0 else [{
+      'name': 'kea-dhcp-ddns',
+      'output_options': [{'output': kea_dhcp_log_output}],
+      'severity': kea_dhcp_log_severity,
+      'debuglevel': kea_dhcp_log_debuglevel}]}) -%}
+{%- set hk = namespace(libs=[]) -%}
+{%- for h in kea_dhcp_ddns_hooks_libraries + kea_dhcp_ddns_settings['hooks-libraries'] | default([]) -%}
+{%-   set hk.libs = hk.libs + [h | combine({'library': m.hook_path(h.library)})] -%}
+{%- endfor -%}
+{%- set final = cfg | combine(kea_dhcp_ddns_settings, recursive=true) -%}
+{%- if hk.libs | length > 0 -%}
+{%-   set final = final | combine({'hooks-libraries': hk.libs}) -%}
+{%- endif -%}
+{{ final | to_json }}

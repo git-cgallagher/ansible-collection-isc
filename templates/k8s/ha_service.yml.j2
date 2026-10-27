@@ -1,0 +1,21 @@
+{% import 'k8s/_meta.j2' as meta with context %}
+{#- Stable in-cluster address for HA peer traffic (service network mode). -#}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ kea_dhcp_k8s_instance_name }}-ha
+  namespace: {{ kea_dhcp_k8s_namespace }}
+  labels: {{ meta.kea_dhcp__labels | to_json }}
+spec:
+  type: ClusterIP
+{% if kea_dhcp_k8s_ha_cluster_ip | length > 0 %}
+  clusterIP: {{ kea_dhcp_k8s_ha_cluster_ip }}
+{% endif %}
+  selector: {{ meta.kea_dhcp__selector | to_json }}
+  ports:
+{% for fam in kea_dhcp_ha_families %}
+    - name: ha-{{ fam }}
+      protocol: TCP
+      port: {{ kea_dhcp_ha_ports[fam] if kea_dhcp__ha_dedicated_listener | bool else kea_dhcp_api_ports[fam] }}
+      targetPort: {{ kea_dhcp_ha_ports[fam] if kea_dhcp__ha_dedicated_listener | bool else kea_dhcp_api_ports[fam] }}
+{% endfor %}

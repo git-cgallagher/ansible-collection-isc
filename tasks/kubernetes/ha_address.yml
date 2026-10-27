@@ -1,0 +1,53 @@
+---
+# Kea needs an IP address (not a DNS name) in HA peer URLs.
+#
+# host mode    — the peer listens on its node's IP: read the node's InternalIP.
+# service mode — the pod IP is ephemeral, so each peer gets a ClusterIP Service;
+#                this server binds 0.0.0.0 and peers dial the Service IP.
+
+- name: Read the pinned node's InternalIP
+  kubernetes.core.k8s_info:
+    kind: Node
+    name: "{{ kea_dhcp_k8s_node_name }}"
+  register: kea_dhcp__k8s_node
+  when:
+    - not kea_dhcp__service_mode | bool
+    - kea_dhcp_k8s_ha_address_from_node | bool
+    - kea_dhcp__k8s_live | bool
+
+- name: Use the node's InternalIP as this peer's HA address
+  ansible.builtin.set_fact:
+    kea_dhcp__ha_bind_address: "{{ kea_dhcp__node_ip }}"
+    kea_dhcp__ha_advertise_address: "{{ kea_dhcp__node_ip }}"
+  vars:
+    kea_dhcp__node_ip: >-
+      {{ (kea_dhcp__k8s_node.resources | first).status.addresses
+         | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | first }}
+  when: kea_dhcp__k8s_node.resources | default([]) | length > 0
+
+- name: Create the per-peer HA Service
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('ansible.builtin.template', 'k8s/ha_service.yml.j2') | ansible.builtin.from_yaml }}"
+    apply: true
+  register: kea_dhcp__k8s_ha_svc
+  when:
+    - kea_dhcp__service_mode | bool
+    - kea_dhcp__k8s_live | bool
+
+- name: Use the HA Service ClusterIP as this peer's advertised address
+  ansible.builtin.set_fact:
+    kea_dhcp__ha_advertise_address: "{{ kea_dhcp__k8s_ha_svc.result.spec.clusterIP }}"
+  when:
+    - kea_dhcp__service_mode | bool
+    - kea_dhcp__k8s_live | bool
+
+- name: Assert every peer has a usable address
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp__ha_advertise_address | string is match('^[0-9a-fA-F:.]+$')
+    fail_msg: >-
+      Could not determine an IP for HA peer {{ inventory_hostname }}. For
+      render-only runs set kea_dhcp_k8s_ha_cluster_ip (service mode) or
+      kea_dhcp_ha_address (host mode).
+    quiet: true

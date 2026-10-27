@@ -1,0 +1,6 @@
+---
+- name: Kea DHCP on Talos
+  hosts: kea_talos
+  gather_facts: false
+  roles:
+    - role: kea_dhcp

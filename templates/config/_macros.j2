@@ -1,0 +1,17 @@
+{#- Shared helpers for the Kea config templates. -#}
+
+{#- Hook library path: bare name on 3.x (Kea refuses paths outside its hooks
+    dir), absolute on 2.6. Anything already containing "/" is left alone. -#}
+{%- macro hook_path(name) -%}
+{{- name if ('/' in name or kea_dhcp__v3 | bool) else (kea_dhcp__hooks_dir_effective ~ '/' ~ name) -}}
+{%- endmacro -%}
+
+{#- Unix socket name: bare on 3.x (must live in the compiled-in socket dir),
+    absolute on 2.6. -#}
+{%- macro socket_path(daemon) -%}
+{{- kea_dhcp__socket_names[daemon] if kea_dhcp__v3 | bool else (kea_dhcp_run_dir ~ '/' ~ kea_dhcp__socket_names[daemon]) -}}
+{%- endmacro -%}
+
+{%- macro wrap_ip(addr) -%}
+{{- ('[' ~ addr ~ ']') if (':' in addr | string and not (addr | string).startswith('[')) else addr -}}
+{%- endmacro -%}

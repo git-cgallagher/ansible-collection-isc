@@ -1,0 +1,33 @@
+{#- Map peer name -> IP for every peer (without an explicit url) in the
+    relationships this server belongs to. Order of preference:
+    peer `address` > this server's bind address > the peer host's resolved
+    fact (set when it is in the play) > its inventory vars. Peers outside the
+    play (--limit) therefore still resolve if their inventory says where they
+    are; anything else stays empty and is rejected by build.yml. -#}
+{%- set me = kea_dhcp_ha_this_server_name -%}
+{%- set ns = namespace(m={}) -%}
+{%- for rel in kea_dhcp__ha_relationships_all -%}
+{%-   if me in (rel.peers | default([]) | map(attribute='name') | list) -%}
+{%-     for p in rel.peers if p.url is not defined -%}
+{%-       set h = p.host | default(p.name) -%}
+{%-       set hv = hostvars[h] if h in hostvars else {} -%}
+{%-       if p.address is defined -%}
+{%-         set a = p.address -%}
+{%-       elif p.name == me -%}
+{%-         set a = kea_dhcp__ha_bind_address -%}
+{%-       elif hv['kea_dhcp__ha_advertise_address'] is defined -%}
+{%-         set a = hv['kea_dhcp__ha_advertise_address'] -%}
+{%-       elif kea_dhcp__service_mode | bool and hv['kea_dhcp_k8s_ha_cluster_ip'] is defined -%}
+{%-         set a = hv['kea_dhcp_k8s_ha_cluster_ip'] -%}
+{%-       elif hv['kea_dhcp_ha_address'] is defined -%}
+{%-         set a = hv['kea_dhcp_ha_address'] -%}
+{%-       elif hv['ansible_host'] is defined -%}
+{%-         set a = hv['ansible_host'] -%}
+{%-       else -%}
+{%-         set a = '' -%}
+{%-       endif -%}
+{%-       set ns.m = ns.m | combine({p.name: a | string}) -%}
+{%-     endfor -%}
+{%-   endif -%}
+{%- endfor -%}
+{{ ns.m | to_json }}

@@ -1,0 +1,13 @@
+---
+- name: Write Kea configuration files
+  ansible.builtin.template:
+    src: kea.conf.j2
+    dest: "{{ kea_dhcp_config_dir }}/{{ kea_dhcp__config_files[kea_dhcp__daemon] }}"
+    owner: root
+    group: "{{ kea_dhcp__group }}"
+    mode: "0640"
+    validate: "{{ (kea_dhcp__binaries[kea_dhcp__daemon] ~ ' -t %s') if kea_dhcp_validate_config | bool else omit }}"
+  loop: "{{ kea_dhcp__daemons }}"
+  loop_control:
+    loop_var: kea_dhcp__daemon
+  notify: "Restart Kea {{ kea_dhcp__daemon }}"

@@ -1,0 +1,75 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # ISC and the distros ship new Kea builds without notice; a weekly run catches
+  # repo/package/image changes before someone deploys against them.
+  schedule:
+    - cron: '0 13 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PY_COLORS: '1'
+  ANSIBLE_FORCE_COLOR: '1'
+
+jobs:
+  lint:
+    name: ansible-lint (production)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tooling
+        run: |
+          pip install ansible-core ansible-lint yamllint
+          ansible-galaxy collection install -r requirements.yml
+      - run: yamllint -s .
+      - run: ansible-lint
+
+  render:
+    # Renders 8 deployment shapes without a cluster and checks every config
+    # with `kea-<daemon> -t` in the ISC 2.6 / 3.0 / 3.2 images.
+    name: render + kea -t
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tooling
+        run: |
+          pip install ansible-core pyyaml kubernetes
+          ansible-galaxy collection install -r requirements.yml
+      - run: tests/run.sh
+
+  molecule:
+    # Package install + idempotence + config verification per distro.
+    name: molecule (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - kea-debian12
+          - kea-ubuntu2404
+          - kea-rocky9
+          - kea-alpine-isc
+          - kea-alpine-distro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tooling
+        run: |
+          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          ansible-galaxy collection install -r requirements.yml community.docker
+      - run: molecule test --platform-name ${{ matrix.platform }}

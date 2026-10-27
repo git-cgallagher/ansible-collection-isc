@@ -1,0 +1,30 @@
+{#- Builds the Control-agent object (Kea 2.6 only) as JSON. On 2.6 the agent
+    owns the HTTP API and forwards to each daemon's unix socket. -#}
+{%- import 'config/_macros.j2' as m with context -%}
+{%- set ns0 = namespace(socks={}) -%}
+{%- for fam in kea_dhcp__families -%}
+{%-   set ns0.socks = ns0.socks | combine({fam: {'socket-type': 'unix', 'socket-name': m.socket_path(fam)}}) -%}
+{%- endfor -%}
+{%- set socks = ns0.socks -%}
+{%- if kea_dhcp_ddns_enabled | bool -%}
+{%-   set socks = socks | combine({'d2': {'socket-type': 'unix', 'socket-name': m.socket_path('ddns')}}) -%}
+{%- endif -%}
+{%- set cfg = {
+      'http-host': kea_dhcp__api_address,
+      'http-port': kea_dhcp_api_ports['ctrl_agent'],
+      'control-sockets': socks} | combine(kea_dhcp_api_tls) -%}
+{%- if kea_dhcp_api_auth_clients | length > 0 -%}
+{%-   set ns = namespace(clients=[]) -%}
+{%-   for c in kea_dhcp_api_auth_clients -%}
+{%-     set ns.clients = ns.clients + [{'user-file': c.user ~ '.user', 'password-file': c.user ~ '.password'}] -%}
+{%-   endfor -%}
+{%-   set cfg = cfg | combine({'authentication': {
+        'type': 'basic', 'realm': kea_dhcp_api_auth_realm,
+        'directory': kea_dhcp_api_auth_dir, 'clients': ns.clients}}) -%}
+{%- endif -%}
+{%- set cfg = cfg | combine({'loggers': kea_dhcp_loggers if kea_dhcp_loggers | length > 0 else [{
+      'name': 'kea-ctrl-agent',
+      'output_options': [{'output': kea_dhcp_log_output}],
+      'severity': kea_dhcp_log_severity,
+      'debuglevel': kea_dhcp_log_debuglevel}]}) -%}
+{{ cfg | combine(kea_dhcp_ctrl_agent_settings, recursive=true) | to_json }}

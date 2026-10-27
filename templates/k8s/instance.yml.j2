@@ -1,0 +1,211 @@
+{#- All objects for one Kea instance: config Secret, storage, Services and the
+    workload. Rendered by tasks/kubernetes/main.yml into a list of documents. -#}
+{% import 'k8s/_meta.j2' as meta with context %}
+{% set inst = kea_dhcp_k8s_instance_name %}
+{% set ns = kea_dhcp_k8s_namespace %}
+{% set host_net = kea_dhcp_k8s_network_mode == 'host' %}
+{% set daemonset = kea_dhcp_k8s_topology == 'shared_db' and host_net %}
+{% set ha_on = kea_dhcp_ha_enabled | bool %}
+
+{#- ---- Secret payload -------------------------------------------------- -#}
+{#- Jinja loops scope `set`, so accumulate through a namespace. -#}
+{% set sec = namespace(data={}) %}
+{% for d in kea_dhcp__daemons %}
+{%   set sec.data = sec.data | combine({kea_dhcp__config_files[d]: kea_dhcp__config[d] | to_nice_json(indent=4)}) %}
+{% endfor %}
+{% for c in kea_dhcp_api_auth_clients %}
+{%   set sec.data = sec.data | combine({'api-' ~ c.user ~ '.password': c.password, 'api-' ~ c.user ~ '.user': c.user}) %}
+{% endfor %}
+{% for f in kea_dhcp_files %}
+{%   set sec.data = sec.data | combine({'file-' ~ loop.index: f.content | default(lookup('ansible.builtin.file', f.src))}) %}
+{% endfor %}
+{% set data = sec.data %}
+{% set checksum = data | to_json | hash('sha256') %}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ inst }}-config
+  namespace: {{ ns }}
+  labels: {{ meta.kea_dhcp__labels | to_json }}
+type: Opaque
+stringData: {{ data | to_json }}
+
+
+{#- ---- Storage --------------------------------------------------------- -#}
+{#- shared_db keeps leases in SQL, so only HA peers (memfile) get a volume. -#}
+{% if kea_dhcp_k8s_storage_type == 'pvc' and kea_dhcp_k8s_topology == 'ha_peers' %}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ inst }}-data
+  namespace: {{ ns }}
+  labels: {{ meta.kea_dhcp__labels | to_json }}
+spec:
+  accessModes: [ReadWriteOnce]
+{% if kea_dhcp_k8s_pvc_storage_class | length > 0 %}
+  storageClassName: {{ kea_dhcp_k8s_pvc_storage_class }}
+{% endif %}
+  resources:
+    requests:
+      storage: {{ kea_dhcp_k8s_pvc_size }}
+{% endif %}
+
+{#- ---- Services (pod network) ------------------------------------------ -#}
+{% if not host_net %}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ inst }}-dhcp
+  namespace: {{ ns }}
+  labels: {{ meta.kea_dhcp__labels | to_json }}
+  annotations: {{ kea_dhcp_k8s_service_annotations | to_json }}
+spec:
+  type: {{ kea_dhcp_k8s_service_type }}
+{% if kea_dhcp_k8s_service_type in ['LoadBalancer', 'NodePort'] %}
+  externalTrafficPolicy: {{ kea_dhcp_k8s_external_traffic_policy }}
+{% endif %}
+{% if kea_dhcp_k8s_load_balancer_class | length > 0 %}
+  loadBalancerClass: {{ kea_dhcp_k8s_load_balancer_class }}
+{% endif %}
+{% if kea_dhcp_k8s_load_balancer_source_ranges | length > 0 %}
+  loadBalancerSourceRanges: {{ kea_dhcp_k8s_load_balancer_source_ranges | to_json }}
+{% endif %}
+  selector: {{ meta.kea_dhcp__selector | to_json }}
+  ports:
+{% if kea_dhcp_dhcp4_enabled | bool %}
+    - {name: dhcpv4, protocol: UDP, port: 67, targetPort: 67}
+{% endif %}
+{% if kea_dhcp_dhcp6_enabled | bool %}
+    - {name: dhcpv6, protocol: UDP, port: 547, targetPort: 547}
+{% endif %}
+{% if ha_on %}
+
+---
+{% include 'k8s/ha_service.yml.j2' %}
+{% endif %}
+{% endif %}
+
+{#- ---- Containers ------------------------------------------------------ -#}
+{% set containers = namespace(items=[]) %}
+{% for d in kea_dhcp__daemons %}
+{%   set mounts = namespace(items=[
+        {'name': 'config', 'mountPath': kea_dhcp_config_dir ~ '/' ~ kea_dhcp__config_files[d], 'subPath': kea_dhcp__config_files[d], 'readOnly': true},
+        {'name': 'data', 'mountPath': kea_dhcp_data_dir}]) %}
+{%   if kea_dhcp__ctrl_agent | bool %}
+{#-     2.6: the control agent reaches each daemon over a shared unix socket. -#}
+{%     set mounts.items = mounts.items + [{'name': 'run', 'mountPath': kea_dhcp_run_dir}] %}
+{%   endif %}
+{%   for c in kea_dhcp_api_auth_clients %}
+{%     for suffix in ['.user', '.password'] %}
+{%       set mounts.items = mounts.items + [{'name': 'config', 'mountPath': kea_dhcp_api_auth_dir ~ '/' ~ c.user ~ suffix, 'subPath': 'api-' ~ c.user ~ suffix, 'readOnly': true}] %}
+{%     endfor %}
+{%   endfor %}
+{%   for f in kea_dhcp_files %}
+{%     set mounts.items = mounts.items + [{'name': 'config', 'mountPath': f.dest, 'subPath': 'file-' ~ loop.index, 'readOnly': true}] %}
+{%   endfor %}
+{%   set ports = namespace(items=[]) %}
+{%   if d == 'dhcp4' %}{% set ports.items = [{'name': 'dhcpv4', 'containerPort': 67, 'protocol': 'UDP'}] %}{% endif %}
+{%   if d == 'dhcp6' %}{% set ports.items = [{'name': 'dhcpv6', 'containerPort': 547, 'protocol': 'UDP'}] %}{% endif %}
+{%   set probe_port = none %}
+{%   if d in kea_dhcp_ha_families and ha_on %}
+{%     set probe_port = kea_dhcp_ha_ports[d] if kea_dhcp__ha_dedicated_listener | bool else kea_dhcp_api_ports[d] %}
+{%     set ports.items = ports.items + [{'name': 'ha-' ~ d, 'containerPort': probe_port, 'protocol': 'TCP'}] %}
+{%   elif kea_dhcp__api_http | bool and (kea_dhcp__v3 | bool or d == 'ctrl_agent') %}
+{%     set probe_port = kea_dhcp_api_ports[d] %}
+{%     set ports.items = ports.items + [{'name': 'api-' ~ (d | replace('_', '')), 'containerPort': probe_port, 'protocol': 'TCP'}] %}
+{%   endif %}
+{%   set ctr = {
+        'name': 'kea-' ~ (d | replace('_', '-')),
+        'image': kea_dhcp_k8s_images[d],
+        'imagePullPolicy': kea_dhcp_k8s_image_pull_policy,
+        'command': ['/usr/sbin/' ~ kea_dhcp__binaries[d], '-c', kea_dhcp_config_dir ~ '/' ~ kea_dhcp__config_files[d]],
+        'env': [{'name': 'KEA_PIDFILE_DIR', 'value': '/tmp'}] + kea_dhcp_k8s_env,
+        'ports': ports.items,
+        'volumeMounts': mounts.items + kea_dhcp_k8s_extra_volume_mounts,
+        'resources': kea_dhcp_k8s_resources,
+        'securityContext': {
+          'allowPrivilegeEscalation': false,
+          'readOnlyRootFilesystem': false,
+          'capabilities': {'drop': ['ALL'], 'add': kea_dhcp_k8s_capabilities}}} %}
+{%   if kea_dhcp_k8s_probes[d] is defined %}
+{%     set ctr = ctr | combine(kea_dhcp_k8s_probes[d]) %}
+{%   elif probe_port is not none %}
+{%     set ctr = ctr | combine({
+          'readinessProbe': {'tcpSocket': {'port': probe_port}, 'periodSeconds': 10},
+          'livenessProbe': {'tcpSocket': {'port': probe_port}, 'initialDelaySeconds': 15, 'periodSeconds': 20, 'failureThreshold': 6}}) %}
+{%   endif %}
+{%   set containers.items = containers.items + [ctr] %}
+{% endfor %}
+
+{#- ---- Volumes --------------------------------------------------------- -#}
+{% set vols = [{'name': 'config', 'secret': {'secretName': inst ~ '-config', 'defaultMode': 416}}] %}
+{% if kea_dhcp_k8s_storage_type == 'hostPath' and kea_dhcp_k8s_topology == 'ha_peers' %}
+{%   set vols = vols + [{'name': 'data', 'hostPath': {'path': kea_dhcp_k8s_host_path_base ~ '/' ~ inst, 'type': 'DirectoryOrCreate'}}] %}
+{% elif kea_dhcp_k8s_storage_type == 'pvc' and kea_dhcp_k8s_topology == 'ha_peers' %}
+{%   set vols = vols + [{'name': 'data', 'persistentVolumeClaim': {'claimName': inst ~ '-data'}}] %}
+{% else %}
+{%   set vols = vols + [{'name': 'data', 'emptyDir': {}}] %}
+{% endif %}
+{% if kea_dhcp__ctrl_agent | bool %}
+{%   set vols = vols + [{'name': 'run', 'emptyDir': {'medium': 'Memory'}}] %}
+{% endif %}
+
+{#- ---- Scheduling ------------------------------------------------------ -#}
+{% set node_sel = kea_dhcp_k8s_node_selector %}
+{% if kea_dhcp_k8s_node_name | length > 0 %}
+{%   set node_sel = node_sel | combine({'kubernetes.io/hostname': kea_dhcp_k8s_node_name}) %}
+{% endif %}
+{% set affinity = kea_dhcp_k8s_affinity %}
+{% if affinity | length == 0 and kea_dhcp_k8s_topology == 'shared_db' and not daemonset %}
+{%   set affinity = {'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution': [{
+        'weight': 100,
+        'podAffinityTerm': {'topologyKey': 'kubernetes.io/hostname', 'labelSelector': {'matchLabels': meta.kea_dhcp__selector}}}]}} %}
+{% endif %}
+{% set pod = {
+      'serviceAccountName': kea_dhcp_k8s_name,
+      'automountServiceAccountToken': false,
+      'hostNetwork': host_net,
+      'dnsPolicy': ('ClusterFirstWithHostNet' if host_net else 'ClusterFirst'),
+      'nodeSelector': node_sel,
+      'tolerations': kea_dhcp_k8s_tolerations,
+      'affinity': affinity,
+      'imagePullSecrets': kea_dhcp_k8s_image_pull_secrets,
+      'terminationGracePeriodSeconds': 30,
+      'containers': containers.items + kea_dhcp_k8s_extra_containers,
+      'volumes': vols + kea_dhcp_k8s_extra_volumes} %}
+{% if kea_dhcp_k8s_priority_class_name | length > 0 %}
+{%   set pod = pod | combine({'priorityClassName': kea_dhcp_k8s_priority_class_name}) %}
+{% endif %}
+{% set template = {
+      'metadata': {
+        'labels': meta.kea_dhcp__labels | combine(kea_dhcp_k8s_pod_labels),
+        'annotations': {'kea-dhcp/config-checksum': checksum} | combine(kea_dhcp_k8s_pod_annotations)},
+      'spec': pod} %}
+
+---
+apiVersion: apps/v1
+kind: {{ 'DaemonSet' if daemonset else 'Deployment' }}
+metadata:
+  name: {{ inst }}
+  namespace: {{ ns }}
+  labels: {{ meta.kea_dhcp__labels | to_json }}
+  annotations: {{ kea_dhcp_k8s_annotations | to_json }}
+spec:
+  selector:
+    matchLabels: {{ meta.kea_dhcp__selector | to_json }}
+{% if daemonset %}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 1}
+{% else %}
+  replicas: {{ 1 if kea_dhcp_k8s_topology == 'ha_peers' else kea_dhcp_k8s_replicas }}
+  # Recreate: a host-network or RWO-volume pod cannot overlap with its successor.
+  strategy:
+    type: {{ 'Recreate' if kea_dhcp_k8s_topology == 'ha_peers' else 'RollingUpdate' }}
+{% endif %}
+  template: {{ template | to_json }}

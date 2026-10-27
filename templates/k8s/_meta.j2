@@ -1,0 +1,9 @@
+{#- Common labels for every object of this instance. -#}
+{% set kea_dhcp__labels = {
+      'app.kubernetes.io/name': 'kea-dhcp',
+      'app.kubernetes.io/instance': kea_dhcp_k8s_instance_name,
+      'app.kubernetes.io/part-of': kea_dhcp_k8s_name,
+      'app.kubernetes.io/managed-by': 'ansible'} | combine(kea_dhcp_k8s_labels) %}
+{% set kea_dhcp__selector = {
+      'app.kubernetes.io/name': 'kea-dhcp',
+      'app.kubernetes.io/instance': kea_dhcp_k8s_instance_name} %}

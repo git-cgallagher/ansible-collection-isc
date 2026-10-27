@@ -1,0 +1,63 @@
+---
+# Every inventory host is one logical Kea instance (an HA peer, or one
+# shared_db workload). All API calls run on the controller.
+
+- name: Set Kubernetes-derived values
+  ansible.builtin.set_fact:
+    kea_dhcp__hooks_dir_effective: "{{ kea_dhcp_hooks_dir if kea_dhcp_hooks_dir | length > 0 else kea_dhcp__k8s_hooks_dir }}"
+    kea_dhcp__ha_bind_address: "{{ '0.0.0.0' if kea_dhcp__service_mode | bool else kea_dhcp_ha_address }}"
+    kea_dhcp__ha_advertise_address: "{{ kea_dhcp_k8s_ha_cluster_ip if kea_dhcp__service_mode | bool else kea_dhcp_ha_address }}"
+    kea_dhcp__k8s_live: "{{ kea_dhcp_k8s_apply | bool and not ansible_check_mode }}"
+
+- name: Talk to the cluster from the controller
+  delegate_to: localhost
+  become: false
+  module_defaults:
+    group/kubernetes.core.k8s:
+      kubeconfig: "{{ kea_dhcp_k8s_kubeconfig if kea_dhcp_k8s_kubeconfig | length > 0 else omit }}"
+      context: "{{ kea_dhcp_k8s_context if kea_dhcp_k8s_context | length > 0 else omit }}"
+  block:
+    - name: Create the namespace and service account
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('ansible.builtin.template', 'k8s/namespace.yml.j2') | ansible.builtin.from_yaml_all | list }}"
+      run_once: true
+      when:
+        - kea_dhcp__k8s_live | bool
+        - kea_dhcp_k8s_state == 'present'
+
+    - name: Resolve HA peer addresses
+      ansible.builtin.import_tasks: ha_address.yml
+      when:
+        - kea_dhcp_ha_enabled | bool
+        - kea_dhcp_k8s_state == 'present'
+
+    - name: Build configuration
+      ansible.builtin.include_tasks: ../config/build.yml
+
+    - name: Render manifests
+      ansible.builtin.set_fact:
+        kea_dhcp__k8s_manifests: "{{ lookup('ansible.builtin.template', 'k8s/instance.yml.j2') | ansible.builtin.from_yaml_all | select | list }}"
+      no_log: true
+
+    - name: Write rendered manifests
+      ansible.builtin.import_tasks: manifests.yml
+      when: kea_dhcp_k8s_manifest_dir | length > 0
+
+    - name: Apply manifests
+      kubernetes.core.k8s:
+        state: "{{ kea_dhcp_k8s_state }}"
+        definition: "{{ kea_dhcp__k8s_manifest }}"
+        apply: "{{ kea_dhcp_k8s_state == 'present' }}"
+        server_side_apply: "{{ {'field_manager': 'ansible-kea-dhcp', 'force_conflicts': true} if kea_dhcp_k8s_state == 'present' else omit }}"
+        wait: "{{ kea_dhcp_k8s_wait | bool and kea_dhcp__k8s_manifest.kind in ['Deployment', 'DaemonSet'] }}"
+        wait_timeout: "{{ kea_dhcp_k8s_wait_timeout }}"
+      loop: >-
+        {{ kea_dhcp__k8s_manifests if kea_dhcp_k8s_state == 'present' else
+           kea_dhcp__k8s_manifests | reverse
+           | rejectattr('kind', 'in', [] if kea_dhcp_k8s_absent_delete_pvc | bool else ['PersistentVolumeClaim']) | list }}
+      loop_control:
+        loop_var: kea_dhcp__k8s_manifest
+        label: "{{ kea_dhcp__k8s_manifest.kind }}/{{ kea_dhcp__k8s_manifest.metadata.name }}"
+      when: kea_dhcp__k8s_live | bool
+      no_log: "{{ kea_dhcp__k8s_manifest.kind == 'Secret' }}"

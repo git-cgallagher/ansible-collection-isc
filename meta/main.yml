@@ -1,0 +1,32 @@
+---
+galaxy_info:
+  namespace: cgallagher
+  role_name: kea_dhcp
+  author: Chris Gallagher
+  description: >-
+    ISC Kea DHCP (v4/v6/DDNS) from OS packages or on Kubernetes (Talos, EKS),
+    with HA (hot-standby, load-balancing, passive-backup, hub-and-spoke),
+    shared SQL lease databases and the configuration backend.
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Alpine
+      versions: [all]
+    - name: Debian
+      versions: [bookworm, trixie]
+    - name: Ubuntu
+      versions: [jammy, noble]
+    - name: EL
+      versions: ["8", "9", "10"]
+    - name: Fedora
+      versions: [all]
+  galaxy_tags:
+    - dhcp
+    - kea
+    - isc
+    - networking
+    - kubernetes
+    - talos
+    - eks
+    - ha
+dependencies: []

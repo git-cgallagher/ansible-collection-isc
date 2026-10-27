@@ -1,0 +1,44 @@
+---
+# apt_repository instead of deb822_repository: the latter needs python3-debian
+# on the target, which slim images do not ship. apt accepts armored keys when
+# the keyring file ends in .asc, so no gpg --dearmor step is needed.
+- name: Install the ISC Kea repository signing key
+  ansible.builtin.get_url:
+    url: "{{ kea_dhcp__isc_repo_url }}/gpg.key"
+    dest: "/usr/share/keyrings/isc-{{ kea_dhcp__isc_repo_name }}.asc"
+    mode: "0644"
+  when: kea_dhcp_isc_repo_manage | bool
+  no_log: "{{ kea_dhcp_isc_repo_token | length > 0 }}"
+
+- name: Configure the ISC Kea apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/isc-{{ kea_dhcp__isc_repo_name }}.asc]
+      {{ kea_dhcp__isc_repo_url }}/deb/{{ ansible_facts['distribution'] | lower }}
+      {{ ansible_facts['distribution_release'] }} main
+    filename: "isc-{{ kea_dhcp__isc_repo_name }}"
+    state: present
+    update_cache: true
+  when: kea_dhcp_isc_repo_manage | bool
+  no_log: "{{ kea_dhcp_isc_repo_token | length > 0 }}"
+
+- name: Install signing keys for extra apt repositories
+  ansible.builtin.get_url:
+    url: "{{ kea_dhcp_repo.key_url }}"
+    dest: "{{ kea_dhcp_repo.key_path | default('/usr/share/keyrings/' ~ kea_dhcp_repo.name ~ '.asc') }}"
+    mode: "0644"
+  loop: "{{ kea_dhcp_extra_repositories | selectattr('type', 'equalto', 'apt') | selectattr('key_url', 'defined') }}"
+  loop_control:
+    loop_var: kea_dhcp_repo
+    label: "{{ kea_dhcp_repo.name }}"
+
+- name: Configure extra apt repositories
+  ansible.builtin.apt_repository:
+    repo: "{{ kea_dhcp_repo.repo }}"
+    filename: "{{ kea_dhcp_repo.name }}"
+    state: "{{ kea_dhcp_repo.state | default('present') }}"
+    update_cache: true
+  loop: "{{ kea_dhcp_extra_repositories | selectattr('type', 'equalto', 'apt') }}"
+  loop_control:
+    loop_var: kea_dhcp_repo
+    label: "{{ kea_dhcp_repo.name }}"

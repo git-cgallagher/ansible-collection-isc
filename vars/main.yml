@@ -1,0 +1,92 @@
+---
+# Internal, derived values. Not part of the public interface — override the
+# kea_dhcp_* variables in defaults/main.yml instead.
+
+kea_dhcp__v3: "{{ kea_dhcp_version_series is version('3.0', '>=') }}"
+
+# ISC Cloudsmith repository naming: kea-3-0, or kea-3-0-prv with a token.
+kea_dhcp__isc_repo_name: >-
+  kea-{{ kea_dhcp_version_series | replace('.', '-') }}{{ '-prv' if kea_dhcp_isc_repo_token | length > 0 else '' }}
+kea_dhcp__isc_repo_url: >-
+  {{ (kea_dhcp_isc_repo_base_url | replace('/public/', '/' ~ kea_dhcp_isc_repo_token ~ '/'))
+     if kea_dhcp_isc_repo_token | length > 0 else kea_dhcp_isc_repo_base_url }}/{{ kea_dhcp__isc_repo_name }}
+
+# Image tags known to exist for each series (override kea_dhcp_k8s_image_tag to move).
+kea_dhcp__default_image_tags:
+  "2.6": 2.6.5
+  "3.0": 3.0.4
+  "3.2": 3.2.1
+
+kea_dhcp__k8s_platform_defaults:
+  talos:
+    storage_type: hostPath
+  eks:
+    storage_type: pvc
+  generic:
+    storage_type: hostPath
+
+# hostNetwork/hostPath are rejected by the PSA "baseline" level (Talos enforces
+# baseline on new namespaces by default).
+kea_dhcp__k8s_privileged_labels:
+  pod-security.kubernetes.io/enforce: privileged
+  pod-security.kubernetes.io/audit: privileged
+  pod-security.kubernetes.io/warn: privileged
+
+# Families this host serves.
+kea_dhcp__families: >-
+  {{ (['dhcp4'] if kea_dhcp_dhcp4_enabled else []) + (['dhcp6'] if kea_dhcp_dhcp6_enabled else []) }}
+
+# High availability ---------------------------------------------------------
+kea_dhcp__ha_relationships_all: >-
+  {{ kea_dhcp_ha_relationships if kea_dhcp_ha_relationships | length > 0
+     else [{'mode': kea_dhcp_ha_mode, 'peers': kea_dhcp_ha_peers}] }}
+kea_dhcp__ha_mt: "{{ kea_dhcp_ha_defaults['multi-threading'] | default({}) }}"
+kea_dhcp__ha_dedicated_listener: >-
+  {{ (kea_dhcp__ha_mt['enable-multi-threading'] | default(true) | bool)
+     and (kea_dhcp__ha_mt['http-dedicated-listener'] | default(true) | bool) }}
+# Without the dedicated listener, HA traffic goes to the daemon's own HTTP
+# control socket (3.x) or the control agent (2.6).
+kea_dhcp__ha_needs_api: "{{ kea_dhcp_ha_enabled and not (kea_dhcp__ha_dedicated_listener | bool) }}"
+
+# Control API --------------------------------------------------------------
+kea_dhcp__api_http: "{{ kea_dhcp_api_http_enabled or (kea_dhcp__ha_needs_api | bool) }}"
+kea_dhcp__api_address: >-
+  {{ kea_dhcp__ha_bind_address | default(kea_dhcp_api_http_address)
+     if kea_dhcp__ha_needs_api | bool else kea_dhcp_api_http_address }}
+kea_dhcp__ctrl_agent: >-
+  {{ (not (kea_dhcp__v3 | bool))
+     and ((kea_dhcp_ctrl_agent_enabled | string | lower == 'true')
+          or (kea_dhcp_ctrl_agent_enabled | string | lower == 'auto' and kea_dhcp__api_http | bool)) }}
+
+kea_dhcp__socket_names:
+  dhcp4: kea4-ctrl-socket
+  dhcp6: kea6-ctrl-socket
+  ddns: kea-ddns-ctrl-socket
+
+# Kubernetes always runs the ISC Alpine images.
+kea_dhcp__k8s_hooks_dir: /usr/lib/kea/hooks
+kea_dhcp__k8s_ns_labels: >-
+  {{ (kea_dhcp__k8s_privileged_labels if kea_dhcp_k8s_network_mode == 'host'
+      or kea_dhcp_k8s_storage_type == 'hostPath' else {})
+     | combine(kea_dhcp_k8s_namespace_labels) }}
+
+# Config file names (identical for packages and images).
+kea_dhcp__config_files:
+  dhcp4: kea-dhcp4.conf
+  dhcp6: kea-dhcp6.conf
+  ddns: kea-dhcp-ddns.conf
+  ctrl_agent: kea-ctrl-agent.conf
+kea_dhcp__binaries:
+  dhcp4: kea-dhcp4
+  dhcp6: kea-dhcp6
+  ddns: kea-dhcp-ddns
+  ctrl_agent: kea-ctrl-agent
+
+kea_dhcp__daemons: >-
+  {{ kea_dhcp__families
+     + (['ddns'] if kea_dhcp_ddns_enabled else [])
+     + (['ctrl_agent'] if kea_dhcp__ctrl_agent | bool else []) }}
+
+# Pod-network deployments only ever see relayed (unicast) DHCP.
+kea_dhcp__service_mode: "{{ kea_dhcp_deployment == 'kubernetes' and kea_dhcp_k8s_network_mode == 'service' }}"
+kea_dhcp__dhcp4_socket_type: "{{ 'udp' if kea_dhcp__service_mode | bool else kea_dhcp_dhcp4_socket_type }}"

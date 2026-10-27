@@ -1,0 +1,9 @@
+---
+- name: Kea DHCP HA pair
+  hosts: kea
+  become: true
+  gather_facts: false  # lets kea_dhcp_bootstrap_python install Python first on minimal hosts
+  vars:
+    kea_dhcp_bootstrap_python: true
+  roles:
+    - role: kea_dhcp

@@ -1,0 +1,22 @@
+---
+- name: Compute the Kea package list
+  ansible.builtin.set_fact:
+    kea_dhcp__packages: >-
+      {{ kea_dhcp_packages_override if kea_dhcp_packages_override | length > 0 else
+         (kea_dhcp__daemons | map('extract', kea_dhcp__pkgs) | flatten
+          + kea_dhcp__pkgs.hooks
+          + (kea_dhcp__pkgs.mysql if 'mysql' in kea_dhcp__db_types else [])
+          + (kea_dhcp__pkgs.postgresql if 'postgresql' in kea_dhcp__db_types else [])
+          + (kea_dhcp__pkgs.admin if kea_dhcp_db_schema_manage | bool else [])
+          + kea_dhcp_packages_extra) | unique }}
+  vars:
+    kea_dhcp__pkgs: "{{ kea_dhcp__os_packages[kea_dhcp_package_source] }}"
+    kea_dhcp__db_types: >-
+      {{ ([kea_dhcp_dhcp4_lease_database, kea_dhcp_dhcp6_lease_database] + kea_dhcp_hosts_databases
+          + kea_dhcp_config_backend.config_databases | default([]))
+         | map(attribute='type') | list }}
+
+- name: Install Kea packages
+  ansible.builtin.package:
+    name: "{{ kea_dhcp__packages }}"
+    state: "{{ kea_dhcp_package_state }}"

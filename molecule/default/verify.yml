@@ -1,0 +1,31 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check every installed config with kea -t
+      ansible.builtin.command:
+        argv: ["{{ item.bin }}", "-t", "/etc/kea/{{ item.conf }}"]
+      loop:
+        - {bin: kea-dhcp4, conf: kea-dhcp4.conf}
+        - {bin: kea-dhcp6, conf: kea-dhcp6.conf}
+        - {bin: kea-dhcp-ddns, conf: kea-dhcp-ddns.conf}
+        - {bin: kea-ctrl-agent, conf: kea-ctrl-agent.conf}
+      when: item.conf in kea_dhcp__installed.files | map(attribute='path') | map('basename') | list
+      changed_when: false
+
+    - name: Report the Kea version
+      ansible.builtin.command:
+        argv: [kea-dhcp4, -V]
+      register: kea_dhcp__version
+      changed_when: false
+
+    - name: Show the Kea version
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: Kea {{ kea_dhcp__version.stdout_lines | first }}"
+  pre_tasks:
+    - name: List installed configs
+      ansible.builtin.find:
+        paths: /etc/kea
+        patterns: "*.conf"
+      register: kea_dhcp__installed

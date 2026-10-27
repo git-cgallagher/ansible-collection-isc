@@ -1,0 +1,11 @@
+---
+profile: production
+# Examples use the role by its Galaxy-style name; it resolves once installed
+# (see README). Mocking keeps syntax-check from requiring an install.
+mock_roles:
+  - kea_dhcp
+exclude_paths:
+  - .cache/
+  - .github/
+  - tests/output/
+  - tests/render/roles/  # symlink back to the repo root (recursion)

@@ -1,0 +1,63 @@
+---
+# Initialises (and optionally upgrades) the SQL schema with kea-admin. Runs once
+# per play: every server in a shared-database cluster points at the same DB.
+# kea-admin takes the password on its command line; the task is no_log, but the
+# value is briefly visible in the target's process table.
+
+- name: Select SQL databases to manage
+  ansible.builtin.set_fact:
+    kea_dhcp__schema_dbs: >-
+      {{ ([kea_dhcp_dhcp4_lease_database] + ([kea_dhcp_dhcp6_lease_database] if kea_dhcp_dhcp6_enabled | bool else [])
+          + kea_dhcp_hosts_databases + kea_dhcp_config_backend.config_databases | default([]))
+         | selectattr('type', 'in', ['mysql', 'postgresql'])
+         | unique(attribute='name') | list }}
+  no_log: true
+
+- name: Read the current schema version
+  ansible.builtin.command:
+    argv: "{{ ['kea-admin', 'db-version', kea_dhcp_db.type] + kea_dhcp__db_args }}"
+  vars:
+    kea_dhcp__db_args: &kea_dhcp_db_args >-
+      {{ ['-n', kea_dhcp_db.name, '-u', kea_dhcp_db.user | default('kea'), '-p', kea_dhcp_db.password | default('')]
+         + (['-h', kea_dhcp_db.host] if kea_dhcp_db.host is defined else [])
+         + (['-P', kea_dhcp_db.port | string] if kea_dhcp_db.port is defined else []) }}
+  loop: "{{ kea_dhcp__schema_dbs }}"
+  loop_control:
+    loop_var: kea_dhcp_db
+    label: "{{ kea_dhcp_db.type }}://{{ kea_dhcp_db.host | default('localhost') }}/{{ kea_dhcp_db.name }}"
+  register: kea_dhcp__db_version
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  run_once: true
+  no_log: true
+
+- name: Initialise empty databases
+  ansible.builtin.command:
+    argv: "{{ ['kea-admin', 'db-init', kea_dhcp_db.type] + kea_dhcp__db_args }}"
+  vars:
+    kea_dhcp__db_args: *kea_dhcp_db_args
+    kea_dhcp_db: "{{ kea_dhcp__dbv.kea_dhcp_db }}"
+  loop: "{{ kea_dhcp__db_version.results | rejectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    loop_var: kea_dhcp__dbv
+    label: "{{ kea_dhcp__dbv.kea_dhcp_db.name }}"
+  changed_when: true
+  run_once: true
+  no_log: true
+
+- name: Upgrade existing databases
+  ansible.builtin.command:
+    argv: "{{ ['kea-admin', 'db-upgrade', kea_dhcp_db.type] + kea_dhcp__db_args }}"
+  vars:
+    kea_dhcp__db_args: *kea_dhcp_db_args
+    kea_dhcp_db: "{{ kea_dhcp__dbv.kea_dhcp_db }}"
+  loop: "{{ kea_dhcp__db_version.results | selectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    loop_var: kea_dhcp__dbv
+    label: "{{ kea_dhcp__dbv.kea_dhcp_db.name }}"
+  register: kea_dhcp__db_upgrade
+  changed_when: "'upgraded' in (kea_dhcp__db_upgrade.stdout | default('') | lower)"
+  when: kea_dhcp_db_schema_upgrade | bool
+  run_once: true
+  no_log: true
