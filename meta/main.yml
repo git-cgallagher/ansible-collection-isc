@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  namespace: cgallagher
+  namespace: git_cgallagher  # Galaxy legacy namespace "git-cgallagher" (hyphens are not allowed here)
   role_name: kea_dhcp
   author: Chris Gallagher
   description: >-

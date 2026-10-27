@@ -1,10 +1,11 @@
-# kea_dhcp — Ansible role for ISC Kea DHCP
+# Ansible Role: Kea DHCP
 
 [![CI](https://github.com/git-cgallagher/ansible-role-kea-dhcp/actions/workflows/ci.yml/badge.svg)](https://github.com/git-cgallagher/ansible-role-kea-dhcp/actions/workflows/ci.yml)
+[![Ansible Galaxy](https://img.shields.io/badge/galaxy-git--cgallagher.kea__dhcp-blue.svg)](https://galaxy.ansible.com/ui/standalone/roles/git-cgallagher/kea_dhcp/)
 
-Deploys [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS in one of two ways:
+Installs and configures [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS, in one of two ways:
 
-- **Packages**: installs Kea on Alpine (OpenRC), Debian/Ubuntu or the RHEL family/Fedora (systemd), with ISC's repositories, your own mirrors, or the distro's packages.
+- **Packages**: installs Kea on Alpine (OpenRC), Debian/Ubuntu or the RHEL family/Fedora (systemd), from ISC's repositories, your own mirrors, or the distro's packages.
 - **Kubernetes**: applies Kea to Talos, EKS or any conformant cluster from the controller, or only renders the manifests for GitOps.
 
 Both paths build the Kea configuration the same way. The role computes the parts that depend on the deployment (control sockets, hooks, HA peers, database hook libraries, loggers). It then deep-merges your own Kea settings on top, so **any Kea key can be set without a role change**.
@@ -14,7 +15,6 @@ Both paths build the Kea configuration the same way. The role computes the parts
 | Kea series | **3.0** (LTS, default) · **3.2** (current stable) · **2.6** (EOL, existing estates only) |
 | Clustering | HA `hot-standby` · `load-balancing` · `passive-backup` · **hub-and-spoke** (multiple relationships) · backup peers · shared MySQL/PostgreSQL lease DB · configuration backend (`server-tag`) |
 | Kubernetes | `ha_peers` (one pinned Deployment per peer) · `shared_db` (N replicas / DaemonSet) × `host` network (broadcast) or `service` network (relayed, behind a LoadBalancer) |
-| Lint | `ansible-lint` **production** profile, clean |
 
 ## Requirements
 
@@ -25,13 +25,79 @@ Both paths build the Kea configuration the same way. The role computes the parts
 - Package mode needs Python on the target. On minimal images, set `kea_dhcp_bootstrap_python: true` and `gather_facts: false`. RHEL-family hosts need `dnf`; `-minimal` images ship only `microdnf`, and the bootstrap installs `dnf` for you.
 - EL hosts (RHEL, Rocky, Alma and similar) need **EPEL**, because Kea's RPMs, ISC's and the distro's alike, depend on `log4cplus`. The role installs `epel-release` (or the release RPM on RHEL). Turn this off with `kea_dhcp_epel_manage: false` if you mirror EPEL yourself.
 
-## Quick start
+### Supported platforms
+
+| Deployment | Platforms |
+|---|---|
+| Packages | Alpine 3.20+ (OpenRC) · Debian 12/13 · Ubuntu 22.04/24.04 · RHEL/Rocky/Alma 8–10 · Fedora (systemd) |
+| Kubernetes | Talos · Amazon EKS · any conformant cluster (k3s, kubeadm, RKE2…) on **amd64** nodes (ISC images are amd64-only) |
+
+CI tests package installs on Debian 12, Ubuntu 24.04, Rocky 9 and Alpine 3.20/3.22. The other listed versions use the same package names and repositories but aren't tested.
+
+## Installation
+
+From Ansible Galaxy:
+
+```bash
+ansible-galaxy role install git-cgallagher.kea_dhcp
+ansible-galaxy collection install community.general kubernetes.core
+```
+
+Or in a `requirements.yml`:
+
+```yaml
+roles:
+  - name: git-cgallagher.kea_dhcp
+collections:
+  - name: community.general
+  - name: kubernetes.core   # Kubernetes deployments only
+```
+
+Or straight from Git, pinned to a commit or tag:
+
+```yaml
+roles:
+  - name: kea_dhcp
+    src: https://github.com/git-cgallagher/ansible-role-kea-dhcp.git
+    scm: git
+    version: main
+```
+
+## Role Variables
+
+Every variable is listed with its type, choices and a description in [`meta/argument_specs.yml`](meta/argument_specs.yml), which Ansible enforces when the role starts. Defaults, with comments, are in [`defaults/main.yml`](defaults/main.yml). To read the spec from the command line:
+
+```bash
+ansible-doc -t role -r ~/.ansible/roles git-cgallagher.kea_dhcp
+```
+
+All variables are prefixed `kea_dhcp_`. The ones you will touch most:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `kea_dhcp_deployment` | `package` | `package` or `kubernetes` |
+| `kea_dhcp_version_series` | `"3.0"` | Repo, config dialect, image tag |
+| `kea_dhcp_dhcp4_enabled` / `_dhcp6_` / `_ddns_` | `true` / `false` / `false` | Daemons to run |
+| `kea_dhcp_interfaces` | `[]` (required) | NICs to serve; `["*"]` = all |
+| `kea_dhcp_dhcp4_settings` / `_dhcp6_` / `_ddns_` | `{}` | Kea keys merged last |
+| `kea_dhcp_lease_database` | memfile | Kea `lease-database` object |
+| `kea_dhcp_ha_enabled`, `_ha_peers`, `_ha_relationships`, `_ha_defaults` | | HA |
+| `kea_dhcp_api_http_enabled`, `_api_tls`, `_api_auth_clients` | off | HTTP(S) API + basic auth |
+| `kea_dhcp_files` | `[]` | TLS certs/keys, password files (host or pod) |
+| `kea_dhcp_package_source` | `isc` | `isc` · `distro` · `none` |
+| `kea_dhcp_k8s_platform` / `_topology` / `_network_mode` | `generic` / `ha_peers` / by platform | Kubernetes shape |
+
+## Dependencies
+
+No role dependencies. Collections are listed under [Requirements](#requirements).
+
+## Example Playbook
 
 ```yaml
 - hosts: dhcp
   become: true
   roles:
-    - role: kea_dhcp
+    - role: git-cgallagher.kea_dhcp
       vars:
         kea_dhcp_interfaces: [eth0]
         kea_dhcp_dhcp4_settings:
@@ -42,7 +108,7 @@ Both paths build the Kea configuration the same way. The role computes the parts
               option-data: [{name: routers, data: 192.0.2.1}]
 ```
 
-The role makes no default assumptions about the network. It **fails** if no interface is set and adds no subnets of its own. Ready-to-adapt inventories are in [`examples/`](examples/). They refer to the role as `kea_dhcp`, so put this checkout on your roles path under that name first (for example `ln -s "$PWD" ~/.ansible/roles/kea_dhcp`):
+The role makes no default assumptions about the network. It **fails** if no interface is set and adds no subnets of its own. Ready-to-adapt inventories are in [`examples/`](examples/). They refer to the role as `kea_dhcp`. To install it under that name, use a `requirements.yml` entry with `src: git-cgallagher.kea_dhcp` and `name: kea_dhcp`, or symlink a checkout (`ln -s "$PWD" ~/.ansible/roles/kea_dhcp`):
 
 - [`package-ha`](examples/package-ha/): HA pair on VMs or bare metal.
 - [`talos-ha`](examples/talos-ha/): HA pair on Talos with host networking.
@@ -166,24 +232,6 @@ A config checksum annotation rolls the pod whenever the configuration changes.
 
 - **Disable ISC**: set `kea_dhcp_isc_repo_manage: false`. To skip package management entirely, use `kea_dhcp_package_source: none`.
 
-## Variables
-
-The full, typed list is in [`meta/argument_specs.yml`](meta/argument_specs.yml) and is enforced when the role starts. [`defaults/main.yml`](defaults/main.yml) documents each variable inline. The ones you will touch most:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `kea_dhcp_deployment` | `package` | `package` or `kubernetes` |
-| `kea_dhcp_version_series` | `"3.0"` | Repo, config dialect, image tag |
-| `kea_dhcp_dhcp4_enabled` / `_dhcp6_` / `_ddns_` | `true` / `false` / `false` | Daemons to run |
-| `kea_dhcp_interfaces` | `[]` (required) | NICs to serve; `["*"]` = all |
-| `kea_dhcp_dhcp4_settings` / `_dhcp6_` / `_ddns_` | `{}` | Kea keys merged last |
-| `kea_dhcp_lease_database` | memfile | Kea `lease-database` object |
-| `kea_dhcp_ha_enabled`, `_ha_peers`, `_ha_relationships`, `_ha_defaults` | | HA |
-| `kea_dhcp_api_http_enabled`, `_api_tls`, `_api_auth_clients` | off | HTTP(S) API + basic auth |
-| `kea_dhcp_files` | `[]` | TLS certs/keys, password files (host or pod) |
-| `kea_dhcp_package_source` | `isc` | `isc` · `distro` · `none` |
-| `kea_dhcp_k8s_platform` / `_topology` / `_network_mode` | `generic` / `ha_peers` / by platform | Kubernetes shape |
-
 ## Testing
 
 CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. To run the same checks locally, you need the following installed:
@@ -205,7 +253,7 @@ molecule test
 
 The Kubernetes path was also applied to a live 3-node kind cluster, in both the Talos-style host-network shape and the EKS-style service shape. Both HA pairs reached `HOT-STANDBY`, re-runs were idempotent, and removal worked. A Kea 2.6 HA pair running over an authenticated control agent was also run live from the role's output and reached `HOT-STANDBY`.
 
-## Gotchas (verified)
+## Known Issues and Gotchas
 
 - **Socket and lease paths are restricted** in Kea 3.x and in 2.6.3+, which got the security backport. Sockets must live in `/var/run/kea`; the literal path `/run/kea` is rejected even though it's the same directory. Lease and log files must sit in Kea's compiled-in directories. The role uses bare names on 3.x for this reason.
 - **ISC container images** run as root, but their binaries are owned by `kea:kea` with mode 0754. Dropping all capabilities therefore makes `exec` fail with *Permission denied*. Pods keep `NET_RAW`, `NET_BIND_SERVICE` and `DAC_OVERRIDE` (`kea_dhcp_k8s_capabilities`).
@@ -219,3 +267,7 @@ The Kubernetes path was also applied to a live 3-node kind cluster, in both the 
 ## License
 
 MIT
+
+## Author Information
+
+Created in 2026 by [Chris Gallagher](https://cgallagher.net). Issues and pull requests are welcome at [git-cgallagher/ansible-role-kea-dhcp](https://github.com/git-cgallagher/ansible-role-kea-dhcp).
