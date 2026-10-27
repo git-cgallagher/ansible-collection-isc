@@ -32,10 +32,20 @@
   register: _stork_agent_ca
 
 - name: Pull the Stork agent image
-  ansible.builtin.command: "{{ _kea_runtime }} pull {{ stork_agent_image }}"
+  ansible.builtin.shell: |
+    set -eu
+    before=$({{ _kea_runtime }} image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG" 2>/dev/null || true)
+    {{ _kea_runtime }} pull -q "$IMG" >/dev/null
+    after=$({{ _kea_runtime }} image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG")
+    [ "$before" = "$after" ] && echo unchanged || echo updated
+  args:
+    executable: /bin/sh
+  environment:
+    IMG: "{{ stork_agent_image }}"
   register: _stork_pull
-  changed_when: "'Downloaded newer image' in _stork_pull.stdout or 'Writing manifest' in _stork_pull.stderr"
   when: kea_container_pull | bool
+  changed_when: "'updated' in _stork_pull.stdout"
+  notify: Restart stork agent
 
 - name: Register the agent with the Stork server
   ansible.builtin.command:

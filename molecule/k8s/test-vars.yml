@@ -29,4 +29,4 @@ stork_db_sslmode: disable
 # Control node reaches the in-cluster Stork API through a port-forward
 # (started by the test harness). Fresh Stork servers boot with admin/admin.
 stork_api_url: http://127.0.0.1:18081
-stork_admin_password: admin
+stork_admin_password: k8s-Admin-pw-1   # rotated from the admin/admin bootstrap

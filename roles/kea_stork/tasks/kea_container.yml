@@ -55,14 +55,26 @@
     - ansible_facts['architecture'] in ['aarch64', 'arm64']
     - kea_image_registry is search('cloudsmith.io/isc')
 
+# Changed only when the image ID moves: podman prints "Writing manifest" even
+# for an up-to-date image, so output-matching is never idempotent.
 - name: Pull Kea images
-  ansible.builtin.command: "{{ _kea_runtime }} pull {{ _kea_images[item.key] }}"
+  ansible.builtin.shell: |
+    set -eu
+    before=$({{ _kea_runtime }} image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG" 2>/dev/null || true)
+    {{ _kea_runtime }} pull -q "$IMG" >/dev/null
+    after=$({{ _kea_runtime }} image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG")
+    [ "$before" = "$after" ] && echo unchanged || echo updated
+  args:
+    executable: /bin/sh
+  environment:
+    IMG: "{{ _kea_images[item.key] }}"
   loop: "{{ _kea_daemons | dict2items | selectattr('value.enabled') | list }}"
   loop_control:
     label: "{{ _kea_images[item.key] }}"
   register: _kea_pull
   when: kea_container_pull | bool
-  changed_when: "'Downloaded newer image' in _kea_pull.stdout or 'Writing manifest' in _kea_pull.stderr"
+  changed_when: "'updated' in _kea_pull.stdout"
+  notify: Restart kea
 
 - name: Install systemd units for Kea containers
   ansible.builtin.template:

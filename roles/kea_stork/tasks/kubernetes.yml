@@ -101,9 +101,19 @@
     # After the server exists: an in-cluster server can only answer now.
     # stork_api_url must be reachable from the control node (port-forward,
     # ingress, or LoadBalancer).
+    - name: Rotate the in-cluster Stork bootstrap admin password
+      ansible.builtin.include_tasks: _stork_rotate_admin.yml
+      vars:
+        _api: "{{ stork_api_url | regex_replace('/$', '') }}/api"
+      when: kea_k8s_state == 'present' and (kea_k8s_stork_server_enabled | bool) and (kea_k8s_apply | bool)
+
     - name: Fetch the Stork server token from the API
       ansible.builtin.include_tasks: _stork_api_token.yml
-      when: (stork_agent_enabled | bool) and stork_server_token | length == 0 and stork_admin_password | length > 0
+      when:
+        - kea_k8s_state == 'present'
+        - kea_k8s_apply | bool
+        - stork_agent_enabled | bool
+        - stork_server_token | length == 0 and stork_admin_password | length > 0
 
     - name: Apply the Stork agent token Secret
       kubernetes.core.k8s:

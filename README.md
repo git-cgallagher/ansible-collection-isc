@@ -83,7 +83,8 @@ is a one-line change (`kea_k8s_profile`).
   - Optionally installs a local PostgreSQL with the role, database and
     `pgcrypto`; otherwise points at external PG such as RDS.
   - Writes `server.env` (0640).
-  - Rotates the `admin`/`admin` bootstrap password.
+  - Rotates the `admin`/`admin` bootstrap password when you set
+    `stork_admin_password`, on VMs and in-cluster.
 - **Kubernetes:**
   - One single-replica StatefulSet per HA peer, with a pinned ClusterIP for HA
     traffic and a LoadBalancer for relayed DHCP.

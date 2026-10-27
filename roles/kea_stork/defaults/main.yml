@@ -215,7 +215,7 @@ stork_db_port: 5432
 stork_db_name: stork
 stork_db_user: stork
 stork_db_password: ""        # REQUIRED — use ansible-vault
-stork_db_sslmode: "{{ 'disable' if stork_db_install_local else 'require' }}"
+stork_db_sslmode: "{{ 'disable' if (stork_db_install_local | bool) else 'require' }}"
 
 # Optional: let the role log in to the Stork API to read the server token for
 # agents (and change the bootstrap admin password). Leave empty to skip.

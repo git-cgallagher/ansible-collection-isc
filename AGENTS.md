@@ -74,13 +74,23 @@ The Kubernetes and container-mode test procedures are in `docs/testing.md`.
   the pod. `loadBalancerClass` and `volumeClaimTemplates` are immutable, so
   changing `kea_k8s_profile` or `kea_k8s_lease_storage` on a live deployment
   needs the Service/StatefulSet deleted first.
+- **Podman prints "Writing manifest" even when nothing changed.** Detect pull
+  changes by comparing image IDs before and after.
 - **YAML:** a bare `on:` key parses as boolean `true`. Don't use `on`, `yes`,
   `no` or `off` as keys.
 
 ## TODO / follow-ups
 
+- **Decide on consolidation with `~/Code/ansible-role-kea-dhcp`** (role
+  `kea_dhcp`, built in a parallel session the same day). It has a broader
+  Kea surface (hub-and-spoke, shared-DB scaling, config backend) but no Stork
+  or AL2023. This role adds Stork, AL2023, container mode and
+  Stork-in-Kubernetes. Two roles for one job will drift: pick a canonical one
+  or merge.
+
 - Run container mode end to end on a real VM. Nested podman can't exec on the
-  dev machine, so only the unit flags were proven (docs/testing.md).
+  dev machine, so it was proven in two halves: the role through a podman
+  shim, then the generated command lines on real Docker (docs/testing.md).
 - Exercise real DHCP traffic through a relay, on real EKS (NLB UDP) and real
   Talos (MetalLB). So far the manifests have only been dry-run and run on k3s.
 - Add a molecule scenario for Alpine (OpenRC) and for Kea 3.2.

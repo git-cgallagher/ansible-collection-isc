@@ -96,6 +96,12 @@ daemon by running `kea-dhcp4 -v` from its own filesystem. Keep its
   (an ingress, LB, or `kubectl port-forward`). The role then reads the token
   after the server is up and stores it in the `kea-stork-agent` Secret.
   Without either, approve machines in the UI.
+- The same `stork_api_url` + `stork_admin_password` also **rotate the
+  in-cluster server's `admin`/`admin` bootstrap password**. That happens on
+  the first run after the server comes up and is skipped afterwards. The URL
+  must be reachable from the control node *during* the play, between "Wait
+  for the in-cluster Stork server" and the per-peer rollout. For an
+  out-of-cluster Stork server it just has to be reachable at play time.
 
 ## Operational gotchas
 
