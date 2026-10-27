@@ -22,20 +22,39 @@ ansible-lint && yamllint .        # production profile, must stay at 0
 Sanity runs from an `ansible_collections/git_cgallagher/stork` checkout:
 `ansible-test sanity --venv`.
 
-## Releasing
+## Releasing (automated: every merge to main is released)
 
-1. Bump `version` in `galaxy.yml` and add a `CHANGELOG.md` entry, in the same
-   PR as the change.
-2. Merge to `main`. CI (sanity 2.18–2.21, lint, molecule) must be green.
-3. Build and publish from a clean checkout of the tag. The token comes from
-   `~/.ansible/galaxy_token`; never paste it anywhere.
-   ```bash
-   git tag v<version> && git push origin v<version>
-   ansible-galaxy collection build --force
-   ansible-galaxy collection publish git_cgallagher-stork-<version>.tar.gz
-   ```
-   **A published version can't be replaced**, only deprecated, so bump the
-   version for every fix.
+1. In the PR, bump `version` in `galaxy.yml` (semver) and add a
+   `## <version>` entry to `CHANGELOG.md`. The **`version-bump`** check in
+   `ansible-test.yml` fails any PR that changes shipped files (anything not
+   in `build_ignore`, `tests/` or `molecule/`) without both. PRs that only
+   touch CI, tests or `AGENTS.md` need no bump.
+2. Merge. When `ansible-test` goes green on `main`, **`release.yml`**:
+   - builds the collection;
+   - publishes it to Galaxy if that version isn't there (secret
+     `GALAXY_API_KEY`);
+   - creates the `v<version>` tag and GitHub release (tarball plus the
+     CHANGELOG section) if they're missing.
+3. `release.yml` is idempotent. It also runs **weekly** (Tue 14:00 UTC) and
+   on demand (`gh workflow run release.yml`), so a failed or skipped publish
+   heals itself.
+
+**A Galaxy version can't be replaced**, only deprecated, so every fix ships
+as a new version. Never push shipped-file changes straight to `main`
+without a bump: the release job would see the version already published and
+skip it, leaving Galaxy behind `main`.
+
+`GALAXY_API_KEY` is a repo Actions secret that Chris sets. Agents never read
+or set it.
+
+The manual fallback, from a clean checkout of the tag, uses
+`~/.ansible/galaxy_token`:
+
+```bash
+ansible-galaxy collection build --force && ansible-galaxy collection publish git_cgallagher-stork-<version>.tar.gz
+```
+
+1.0.0 was published this way on 2026-10-27, from commit `680bc20`.
 
 ## Conventions
 
