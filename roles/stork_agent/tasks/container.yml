@@ -64,7 +64,7 @@
     _stork_agent_register_cmd: >-
       {{ [_stork_agent_runtime, 'run', '--rm', '--network', 'host',
           '-v', '/var/lib/stork-agent:/var/lib/stork-agent', stork_agent_image, 'stork-agent'] }}
-    _stork_agent_register_user: root
+    _stork_agent_register_owner: root
 
 - name: Install the systemd unit
   ansible.builtin.template:

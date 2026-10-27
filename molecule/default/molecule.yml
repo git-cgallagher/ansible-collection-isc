@@ -56,6 +56,10 @@ provisioner:
     group_vars:
       all:
         test_admin_password: molecule-Admin-pw-1
+        # The docker connection is already root. Skipping sudo avoids the
+        # amd64 AL2023 image's "PAM account management error" on GitHub
+        # runners (not reproducible on arm64).
+        ansible_become: false
       stork_server:
         stork_server_version: "2.6.0"
         stork_server_db_password: molecule-db-pw

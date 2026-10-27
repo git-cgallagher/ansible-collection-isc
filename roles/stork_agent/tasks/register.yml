@@ -1,6 +1,9 @@
 ---
 # Inputs: _stork_agent_register_cmd (argv prefix that runs `stork-agent`),
-#         _stork_agent_register_user (user to run it as).
+#         _stork_agent_register_owner (user that must own the state dir).
+# Registers as root and hands the state over afterwards: no become_user, so
+# no dependence on ACLs for Ansible's temp files or on sudo/PAM for the
+# service account.
 # Registration writes /var/lib/stork-agent/root-cert.pem: the marker.
 - name: Check whether the agent is registered
   ansible.builtin.stat:
@@ -17,13 +20,19 @@
             '--agent-port', stork_agent_port | string]
          + (['--server-token', _stork_agent_token] if _stork_agent_token | length > 0 else [])
          + (['--skip-tls-cert-verification'] if stork_agent_skip_tls_verify | bool else []) }}
-  become: true
-  become_user: "{{ _stork_agent_register_user }}"
   when: not _stork_agent_registered.stat.exists
   register: _stork_agent_register
   changed_when: true
   no_log: "{{ _stork_agent_token | length > 0 }}"
   notify: Restart stork agent
+
+- name: Hand the agent state to its service account
+  ansible.builtin.file:
+    path: /var/lib/stork-agent
+    state: directory
+    recurse: true
+    owner: "{{ _stork_agent_register_owner }}"
+    group: "{{ _stork_agent_register_owner }}"
 
 - name: Tell the operator the machine needs approval
   ansible.builtin.debug:
