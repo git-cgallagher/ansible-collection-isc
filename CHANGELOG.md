@@ -1,9 +1,14 @@
 # Changelog
 
+## 1.0.1 — 2026-10-28
+
+- Docs: the migration notes now cover only the standalone Kea role.
+- `stork_server`: the header of the generated `server.env` names this
+  collection's role.
+
 ## 1.0.0 — 2026-10-27
 
-First release of `git_cgallagher.isc`. It merges two earlier projects; both
-keep their full git history in this repository.
+First release of `git_cgallagher.isc`.
 
 - **`kea_dhcp`**, previously the standalone Galaxy role `git-cgallagher.kea_dhcp`:
   - Behaviour and variables are unchanged.
@@ -12,9 +17,9 @@ keep their full git history in this repository.
     Kea's process.
   - Its pre-merge history is in
     [docs/kea_dhcp-changelog-standalone.md](docs/kea_dhcp-changelog-standalone.md).
-- **`stork_server`, `stork_agent`, `stork_repository`**, previously the
-  collection `git_cgallagher.stork` 1.0.0: behaviour and variables are
-  unchanged.
+- **`stork_server`, `stork_agent`, `stork_repository`** (new): the Stork
+  server, agents next to Kea on hosts, in containers or as a Kubernetes
+  sidecar, and ISC's Stork package repository.
 - One CI pipeline covers everything:
   - ansible-test sanity on ansible-core 2.18–2.21;
   - ansible-lint (production profile);
@@ -29,4 +34,3 @@ keep their full git history in this repository.
 | Before | After |
 |---|---|
 | `git-cgallagher.kea_dhcp` (role) | `git_cgallagher.isc.kea_dhcp` |
-| `git_cgallagher.stork.<role>` | `git_cgallagher.isc.<role>` |

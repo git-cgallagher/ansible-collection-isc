@@ -11,9 +11,8 @@ Ansible collection for [ISC](https://www.isc.org/) network services:
 - **Stork**: the monitoring server, and agents that sit next to Kea on hosts,
   in containers, or as a sidecar in Kea's pods.
 
-This collection replaces the standalone role `git-cgallagher.kea_dhcp` and
-the collection `git_cgallagher.stork`, which are retired. See
-[Migrating](#migrating).
+This collection replaces the standalone role `git-cgallagher.kea_dhcp`,
+which is retired. See [Migrating](#migrating).
 
 ## Tested with
 
@@ -134,8 +133,6 @@ Stork sidecar wiring, including how its mounts must mirror Kea's, is in
 |---|---|
 | `ansible-galaxy role install git-cgallagher.kea_dhcp` | `ansible-galaxy collection install git_cgallagher.isc` |
 | `role: git-cgallagher.kea_dhcp` | `role: git_cgallagher.isc.kea_dhcp` |
-| `ansible-galaxy collection install git_cgallagher.stork` | `ansible-galaxy collection install git_cgallagher.isc` |
-| `role: git_cgallagher.stork.stork_agent` (and `stork_server`, `stork_repository`) | `role: git_cgallagher.isc.stork_agent` (and the others) |
 
 The variables are unchanged. The only addition is
 `kea_dhcp_k8s_share_process_namespace`, which defaults to `false`.
