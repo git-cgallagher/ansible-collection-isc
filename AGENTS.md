@@ -21,6 +21,7 @@ roles/stork_*            Stork server, agent, package repository
 docker/                  Stork image Dockerfiles (ISC publishes none)
 examples/kea_dhcp/       ready-to-adapt Kea inventories
 molecule/kea_dhcp/       Kea package installs on 5 distros (no init: configs validated, services not started)
+molecule/kea_dhcp_ha3/   Kea 3-node HA (primary + standby + backup): starts Kea, checks states + failover
 molecule/stork/          Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
 tests/kea_dhcp/          render 8 Kea deployment shapes + `kea -t` in ISC 2.6/3.0/3.2 images
 docs/                    stork-research, stork-kubernetes, testing, kea_dhcp-changelog-standalone
@@ -34,6 +35,7 @@ mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../
 ansible-lint && yamllint .          # production profile, must stay at 0
 tests/kea_dhcp/run.sh               # Kea render + kea -t (Docker; amd64 images)
 molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
+molecule test -s kea_dhcp_ha3       # 3-node HA states + failover
 molecule test -s stork
 ```
 
@@ -171,6 +173,6 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - Publish the Stork images (GHCR) so container and Kubernetes users don't have
   to build them.
 - `kea-admin` schema management is untested against a live MySQL/PostgreSQL.
-- Molecule cannot start services (no init in containers); service start is untested in CI.
+- Molecule cannot start services (no init in containers): `kea_dhcp_ha3` starts kea-dhcp4 directly, but starting Kea through systemd/OpenRC is still untested in CI.
 - Possible additions: BIND 9 (Stork already monitors it); reuse
   `stork_repository` for Kea's Cloudsmith repos.

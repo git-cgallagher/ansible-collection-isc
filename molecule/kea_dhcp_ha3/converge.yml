@@ -1,0 +1,37 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: false
+  vars:
+    kea_dhcp_bootstrap_python: true
+    kea_dhcp_manage_service: false
+    kea_dhcp_version_series: "3.0"
+    kea_dhcp_interfaces: [eth0]
+    kea_dhcp_ha_enabled: true
+    kea_dhcp_ha_mode: hot-standby
+    kea_dhcp_ha_peers:
+      - {name: kea1, role: primary}
+      - {name: kea2, role: standby, auto-failover: true}
+      - {name: kea3, role: backup}
+    # Short timers so the failover check finishes in seconds. With no DHCP
+    # clients in the test, max-unacked-clients 0 lets the standby declare the
+    # primary down on heartbeat loss alone.
+    kea_dhcp_ha_defaults:
+      heartbeat-delay: 2000
+      max-response-delay: 6000
+      max-ack-delay: 1000
+      max-unacked-clients: 0
+      multi-threading:
+        enable-multi-threading: true
+        http-dedicated-listener: true
+        http-listener-threads: 0
+        http-client-threads: 0
+    kea_dhcp_dhcp4_settings:
+      subnet4:
+        - id: 1
+          subnet: 172.29.30.0/24
+          pools: [{pool: 172.29.30.100 - 172.29.30.200}]
+  tasks:
+    - name: Apply the role from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp

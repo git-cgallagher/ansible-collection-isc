@@ -1,0 +1,74 @@
+---
+# No init system in the containers: start kea-dhcp4 directly, then ask each
+# server for its HA state over the unix control socket.
+- name: Start Kea on every node
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Create the control socket directory Kea 3.x requires
+      ansible.builtin.file:
+        path: /var/run/kea
+        state: directory
+        owner: _kea
+        group: _kea
+        mode: "0750"
+
+    # async + poll 0 detaches Kea through Ansible's async wrapper, so the
+    # connection doesn't wait on it (a shell `&` keeps the docker exec open).
+    - name: Start kea-dhcp4 in the background
+      ansible.builtin.command:
+        cmd: /usr/sbin/kea-dhcp4 -c /etc/kea/kea-dhcp4.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+- name: Check HA states, then fail the primary over
+  hosts: all
+  gather_facts: false
+  vars:
+    kea_ha3_expected:
+      kea1: hot-standby
+      kea2: hot-standby
+      kea3: backup
+  tasks:
+    - name: Install the HA state helper
+      ansible.builtin.copy:
+        src: kea-ha-state.py
+        dest: /usr/local/bin/kea-ha-state
+        mode: "0755"
+
+    - name: Wait for the expected steady-state HA state
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kea-ha-state
+      register: kea_ha3_state
+      until: kea_ha3_state.stdout == kea_ha3_expected[inventory_hostname]
+      retries: 40
+      delay: 5
+      changed_when: false
+      failed_when: kea_ha3_state.stdout != kea_ha3_expected[inventory_hostname]
+
+    - name: Stop the primary
+      # Debian slim has no procps (pkill); Kea records its PID here.
+      ansible.builtin.shell:
+        cmd: kill "$(cat /var/run/kea/kea-dhcp4.kea-dhcp4.pid)"
+      changed_when: true
+      when: inventory_hostname == 'kea1'
+
+    - name: Standby takes over as partner-down
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kea-ha-state
+      register: kea_ha3_failover
+      until: kea_ha3_failover.stdout == 'partner-down'
+      retries: 30
+      delay: 2
+      changed_when: false
+      failed_when: kea_ha3_failover.stdout != 'partner-down'
+      when: inventory_hostname == 'kea2'
+
+    - name: Backup stays passive
+      ansible.builtin.command:
+        cmd: /usr/local/bin/kea-ha-state
+      register: kea_ha3_backup
+      changed_when: false
+      failed_when: kea_ha3_backup.stdout != 'backup'
+      when: inventory_hostname == 'kea3'

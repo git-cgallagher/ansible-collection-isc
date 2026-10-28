@@ -123,6 +123,28 @@ jobs:
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
       - run: molecule test -s kea_dhcp --platform-name ${{ matrix.platform }}
 
+  molecule-kea-ha3:
+    # Three-node HA (primary + standby + backup): starts Kea, checks the HA
+    # states, then a real failover.
+    name: molecule kea_dhcp_ha3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          ansible-galaxy collection install -r requirements.yml
+          ansible-galaxy collection install community.docker
+      - name: Expose the checkout as git_cgallagher.isc
+        run: |
+          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
+          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+      - run: molecule test -s kea_dhcp_ha3
+
   molecule-stork:
     name: molecule stork
     runs-on: ubuntu-latest
