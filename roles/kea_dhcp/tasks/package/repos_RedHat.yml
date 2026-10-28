@@ -2,7 +2,7 @@
 - name: Enable EPEL for log4cplus
   when:
     - kea_dhcp_epel_manage | bool
-    - ansible_facts['distribution'] != 'Fedora'
+    - ansible_facts['distribution'] not in ['Fedora', 'Amazon']
     - kea_dhcp_package_source != 'none'
   block:
     - name: Import the EPEL signing key on RHEL
@@ -21,6 +21,31 @@
               if ansible_facts['distribution'] == 'RedHat' else 'epel-release') }}
         state: present
 
+# Amazon Linux 2023: ISC's amzn/2023 repos are empty and Amazon doesn't
+# support EPEL (epel-release needs redhat-release). ISC's EL9 RPMs install and
+# run there; the only missing dependency is log4cplus, taken from EPEL 9 by a
+# repo restricted to that package so EPEL can't replace anything else.
+- name: Enable EPEL 9 for log4cplus only (Amazon Linux)
+  when:
+    - kea_dhcp_epel_manage | bool
+    - ansible_facts['distribution'] == 'Amazon'
+    - kea_dhcp_package_source != 'none'
+  block:
+    - name: Import the EPEL 9 signing key
+      ansible.builtin.rpm_key:
+        key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+        state: present
+
+    - name: Configure EPEL 9 restricted to log4cplus
+      ansible.builtin.yum_repository:
+        name: epel9-kea-log4cplus
+        description: EPEL 9 (log4cplus only, for ISC Kea)
+        metalink: https://mirrors.fedoraproject.org/metalink?repo=epel-9&arch=$basearch
+        gpgcheck: true
+        gpgkey: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+        includepkgs: [log4cplus*]
+        mode: "0644"
+
 - name: Import the ISC Kea repository signing key
   ansible.builtin.rpm_key:
     key: "{{ kea_dhcp__isc_repo_url }}/gpg.key"
@@ -32,9 +57,7 @@
   ansible.builtin.yum_repository:
     name: "isc-{{ kea_dhcp__isc_repo_name }}{{ kea_dhcp_arch.suffix }}"
     description: "ISC Kea {{ kea_dhcp_version_series }}{{ kea_dhcp_arch.suffix }}"
-    baseurl: >-
-      {{ kea_dhcp__isc_repo_url }}/rpm/{{ 'fedora' if ansible_facts['distribution'] == 'Fedora' else 'el' }}/{{
-      ansible_facts['distribution_major_version'] }}/{{ kea_dhcp_arch.path }}
+    baseurl: "{{ kea_dhcp__isc_repo_url }}/rpm/{{ kea_dhcp__isc_rpm_release }}/{{ kea_dhcp_arch.path }}"
     gpgkey: "{{ kea_dhcp__isc_repo_url }}/gpg.key"
     gpgcheck: true
     repo_gpgcheck: true

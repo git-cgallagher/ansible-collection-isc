@@ -3,7 +3,7 @@
 # isc-kea 3.0 el9 RPMs (/usr/lib/systemd/system/kea-dhcp4.service).
 kea_dhcp__os_user: kea
 # Installed before any repository is added (HTTPS repos need a CA bundle).
-kea_dhcp__os_prereqs: [ca-certificates]
+kea_dhcp__os_prereqs: [ca-certificates, shadow-utils]  # shadow-utils: groupadd/useradd for the user fallback
 kea_dhcp__os_packages:
   isc:
     dhcp4: [isc-kea-dhcp4]

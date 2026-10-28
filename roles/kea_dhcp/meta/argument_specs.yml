@@ -76,6 +76,9 @@ argument_specs:
       kea_dhcp_epel_package:
         type: str
         description: EPEL release package name or RPM URL; empty = epel-release, or the release URL on RHEL.
+      kea_dhcp_isc_repo_rpm_release:
+        type: str
+        description: ISC RPM repo path such as el/9 or fedora/42; empty = derived from the host (Amazon Linux 2023 maps to el/9).
       kea_dhcp_extra_repositories:
         type: list
         description: Extra apt/yum/apk repositories (see README for item keys).

@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [kea-debian12, kea-ubuntu2404, kea-rocky9, kea-alpine-isc, kea-alpine-distro]
+        platform: [kea-debian12, kea-ubuntu2404, kea-rocky9, kea-al2023, kea-al2023-min, kea-alpine-isc, kea-alpine-distro]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

@@ -120,6 +120,10 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   renders itself as `0.0.0.0` and its partner as the partner's ClusterIP (verified live in
   Docker: both peers reach HOT-STANDBY).
 
+- Amazon Linux 2023: ISC's `amzn/2023` repos exist but are EMPTY (168-byte primary index), and AL2023
+  ships no kea/log4cplus. The role maps AL2023 to ISC's `el/9` repo plus an EPEL 9 repo restricted to
+  `log4cplus*` (`epel-release` needs `redhat-release`, which AL2023 lacks). AL2023 minimal's `dnf` is
+  `microdnf`: the bootstrap runs `microdnf swap microdnf-dnf dnf` first.
 - ISC EL RPMs need `log4cplus` from EPEL — without it dnf depsolve fails (caught by Molecule
   on Rocky 9). The role installs `epel-release` unless `kea_dhcp_epel_manage: false`.
 - A peer's partner URL must be an IP. A `--limit` run once rendered `http://th2:8001/` because

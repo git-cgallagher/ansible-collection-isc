@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 — 2026-10-28
+
+- **`kea_dhcp`**: Amazon Linux 2023 support, including the minimal image, on
+  x86_64 and arm64.
+  - ISC's `amzn/2023` repositories are empty, so the role uses ISC's EL9 RPMs.
+    It adds EPEL 9 restricted to `log4cplus`, because Amazon doesn't support
+    `epel-release`. New variable `kea_dhcp_isc_repo_rpm_release` overrides the
+    repo path (`el/9`, `fedora/42`…).
+  - Python bootstrap fixed for hosts where `dnf` is really `microdnf`
+    (AL2023 minimal): it swaps in real `dnf` first.
+  - Creates the Kea user when the packages couldn't (no systemd, so no
+    `systemd-sysusers`).
+  - Molecule and CI cover `amazonlinux:2023` and `amazonlinux:2023-minimal`.
+
 ## 1.1.0 — 2026-10-28
 
 - **`kea_dhcp`**: new example
