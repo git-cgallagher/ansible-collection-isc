@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 — 2026-10-28
+
+- **`kea_dhcp`**: new example
+  [`examples/kea_dhcp/vm-ha3`](examples/kea_dhcp/vm-ha3/): three VMs as
+  primary + standby + backup. No role changes.
+- New Molecule scenario `kea_dhcp_ha3`, also run in CI. It starts Kea on three
+  Debian 12 nodes and checks the HA states, then a real failover: the standby
+  takes over when the primary stops and the backup stays passive.
+
 ## 1.0.1 — 2026-10-28
 
 - Docs: the migration notes now cover only the standalone Kea role.

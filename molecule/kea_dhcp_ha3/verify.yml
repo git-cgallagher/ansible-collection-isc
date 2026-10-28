@@ -1,0 +1,91 @@
+---
+# No init system in the containers: start kea-dhcp4 directly, then ask each
+# server for its HA state over the unix control socket.
+- name: Start Kea on every node
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Create the control socket directory Kea 3.x requires
+      ansible.builtin.file:
+        path: /var/run/kea
+        state: directory
+        owner: _kea
+        group: _kea
+        mode: "0750"
+
+    # async + poll 0 detaches Kea through Ansible's async wrapper, so the
+    # connection doesn't wait on it (a shell `&` keeps the docker exec open).
+    - name: Start kea-dhcp4 in the background
+      ansible.builtin.command:
+        cmd: /usr/sbin/kea-dhcp4 -c /etc/kea/kea-dhcp4.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+- name: Check HA states, then fail the primary over
+  hosts: all
+  gather_facts: false
+  vars:
+    kea_ha3_expected:
+      kea1: hot-standby
+      kea2: hot-standby
+      kea3: backup
+    # Kept inline (not a .py file) so ansible-test sanity doesn't treat it as
+    # collection code. Prints this server's HA state via ha-heartbeat.
+    kea_ha3_state_script: |
+      import json
+      import socket
+      sock = socket.socket(socket.AF_UNIX)
+      sock.connect("/var/run/kea/kea4-ctrl-socket")
+      sock.sendall(json.dumps({"command": "ha-heartbeat"}).encode())
+      data = b""
+      while True:
+          chunk = sock.recv(65536)
+          if not chunk:
+              break
+          data += chunk
+      reply = json.loads(data)
+      reply = reply[0] if isinstance(reply, list) else reply
+      print(reply.get("arguments", {}).get("state") or "error %s: %s" % (reply.get("result"), reply.get("text")))
+  tasks:
+    - name: Install the HA state helper
+      ansible.builtin.copy:
+        content: "{{ kea_ha3_state_script }}"
+        dest: /usr/local/lib/kea-ha-state.py
+        mode: "0644"
+
+    - name: Wait for the expected steady-state HA state
+      ansible.builtin.command:
+        cmd: python3 /usr/local/lib/kea-ha-state.py
+      register: kea_ha3_state
+      until: kea_ha3_state.stdout == kea_ha3_expected[inventory_hostname]
+      retries: 40
+      delay: 5
+      changed_when: false
+      failed_when: kea_ha3_state.stdout != kea_ha3_expected[inventory_hostname]
+
+    - name: Stop the primary
+      # Debian slim has no procps (pkill); Kea records its PID here.
+      ansible.builtin.shell:
+        cmd: kill "$(cat /var/run/kea/kea-dhcp4.kea-dhcp4.pid)"
+      changed_when: true
+      when: inventory_hostname == 'kea1'
+
+    - name: Standby takes over as partner-down
+      ansible.builtin.command:
+        cmd: python3 /usr/local/lib/kea-ha-state.py
+      register: kea_ha3_failover
+      until: kea_ha3_failover.stdout == 'partner-down'
+      retries: 30
+      delay: 2
+      changed_when: false
+      failed_when: kea_ha3_failover.stdout != 'partner-down'
+      when: inventory_hostname == 'kea2'
+
+    - name: Backup stays passive
+      ansible.builtin.command:
+        cmd: python3 /usr/local/lib/kea-ha-state.py
+      register: kea_ha3_backup
+      changed_when: false
+      failed_when: kea_ha3_backup.stdout != 'backup'
+      when: inventory_hostname == 'kea3'

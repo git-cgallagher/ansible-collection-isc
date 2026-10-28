@@ -113,6 +113,7 @@ The role makes no default assumptions about the network. It **fails** if no inte
 [`examples/kea_dhcp/`](../../examples/kea_dhcp/):
 
 - [`package-ha`](../../examples/kea_dhcp/package-ha/): HA pair on VMs or bare metal.
+- [`vm-ha3`](../../examples/kea_dhcp/vm-ha3/): three VMs, primary + standby + backup.
 - [`talos-ha`](../../examples/kea_dhcp/talos-ha/): HA pair on Talos with host networking.
 - [`eks-relay`](../../examples/kea_dhcp/eks-relay/): relayed DHCP on EKS with an RDS lease database.
 
@@ -260,6 +261,12 @@ molecule test -s kea_dhcp
 ```
 
 `molecule test -s kea_dhcp` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
+
+```bash
+molecule test -s kea_dhcp_ha3
+```
+
+`molecule test -s kea_dhcp_ha3` builds a three-node primary + standby + backup cluster on Debian 12, with Kea 3.0 from ISC's packages. It starts Kea on each node and checks that kea1 and kea2 reach `hot-standby` and kea3 reaches `backup`. It then stops the primary and checks that the standby takes over (`partner-down`) while the backup stays passive.
 
 The Kubernetes path was also applied to a live 3-node kind cluster, in both the Talos-style host-network shape and the EKS-style service shape. Both HA pairs reached `HOT-STANDBY`, re-runs were idempotent, and removal worked. A Kea 2.6 HA pair running over an authenticated control agent was also run live from the role's output and reached `HOT-STANDBY`.
 
