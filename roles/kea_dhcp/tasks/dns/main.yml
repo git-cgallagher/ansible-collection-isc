@@ -1,12 +1,11 @@
 ---
 # Resolve kea_dhcp_dns_integration into kea_dhcp__dns: the provider preset
-# (vars/dns/<integration>.yml, loaded into its own namespace so it never
-# outranks your vars), derived defaults, then kea_dhcp_dns on top.
+# (vars/dns/<integration>.yml defines the internal kea_dhcp__dns_preset dict,
+# so it never collides with your vars), derived defaults, then kea_dhcp_dns on top.
 
 - name: Load the DNS integration preset
   ansible.builtin.include_vars:
     file: "dns/{{ kea_dhcp_dns_integration }}.yml"
-    name: kea_dhcp__dns_preset
 
 - name: Resolve DNS integration settings
   vars:
@@ -54,14 +53,17 @@
           - kea_dhcp__v3 | bool
           - kea_dhcp__dns.keytab_src | default('') | length > 0
           - kea_dhcp__dns.realm | length > 0
+          - kea_dhcp_deployment != 'package' or kea_dhcp_package_source != 'distro'
+          # The systemd drop-in is how a managed kea-dhcp-ddns gets KRB5_CONFIG.
           - >-
-            kea_dhcp_deployment != 'package'
-            or (kea_dhcp_package_source != 'distro'
-                and ansible_facts['service_mgr'] | default('systemd') == 'systemd')
+            kea_dhcp_deployment != 'package' or not kea_dhcp_manage_service | bool
+            or ansible_facts['service_mgr'] | default('systemd') == 'systemd'
         fail_msg: >-
           GSS-TSIG ({{ kea_dhcp_dns_integration }}) needs Kea 3.0 or newer (ISC ships no
           public 2.6 gss-tsig hook), kea_dhcp_dns.keytab_src (controller path to the
-          keytab), and in package mode ISC packages on a systemd host.
+          keytab), and in package mode ISC packages, with services managed by systemd
+          (or kea_dhcp_manage_service: false, and you start kea-dhcp-ddns with
+          KRB5_CONFIG={{ kea_dhcp_config_dir }}/krb5.conf yourself).
         quiet: true
       when: kea_dhcp__dns.mode == 'gss'
 

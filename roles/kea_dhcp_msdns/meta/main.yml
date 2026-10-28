@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: Chris Gallagher
+  description: >-
+    Prepares Active Directory / Microsoft DNS (or Samba AD) for ISC Kea's
+    GSS-TSIG dynamic DNS updates: service account, UPN, SPN, DnsUpdateProxy,
+    zones and the keytab.
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Windows
+      versions: [all]
+    - name: Debian
+      versions: [all]
+    - name: EL
+      versions: [all]
+  galaxy_tags: [kea, dhcp, dns, ddns, activedirectory, gsstsig]
+dependencies: []

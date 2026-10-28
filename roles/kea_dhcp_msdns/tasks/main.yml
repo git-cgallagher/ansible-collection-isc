@@ -1,0 +1,42 @@
+---
+# Argument validation (meta/argument_specs.yml) runs automatically before this.
+
+- name: Assert the required inputs
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp_msdns_domain | length > 0
+      - kea_dhcp_msdns_service_account_password | length > 0
+      - kea_dhcp_msdns_keytab_dest | length > 0
+      - kea_dhcp_msdns_dynamic_update in ['Secure', 'NonsecureAndSecure']
+    fail_msg: >-
+      Set kea_dhcp_msdns_domain, kea_dhcp_msdns_service_account_password (vault) and
+      kea_dhcp_msdns_keytab_dest (a controller path outside any repository).
+    quiet: true
+  no_log: true
+
+- name: Choose the backend
+  ansible.builtin.set_fact:
+    kea_dhcp_msdns__backend: >-
+      {{ kea_dhcp_msdns_backend if kea_dhcp_msdns_backend != 'auto'
+         else ('windows' if ansible_facts['os_family'] | default('') == 'Windows' else 'samba') }}
+    # The SPN is the principal without its realm (DHCP/kea.example.com).
+    kea_dhcp_msdns__spn: "{{ kea_dhcp_msdns_client_principal | regex_replace('@[^@]+$', '') }}"
+
+- name: Decide whether to produce a keytab
+  ansible.builtin.stat:
+    path: "{{ kea_dhcp_msdns_keytab_dest }}"
+  register: kea_dhcp_msdns__keytab_existing
+  delegate_to: localhost
+  become: false
+
+- name: Set the keytab decision
+  ansible.builtin.set_fact:
+    kea_dhcp_msdns__make_keytab: "{{ kea_dhcp_msdns_keytab_rotate | bool or not kea_dhcp_msdns__keytab_existing.stat.exists }}"
+
+- name: Prepare Active Directory on Windows
+  ansible.builtin.include_tasks: windows.yml
+  when: kea_dhcp_msdns__backend == 'windows'
+
+- name: Prepare Samba AD
+  ansible.builtin.include_tasks: samba.yml
+  when: kea_dhcp_msdns__backend == 'samba'

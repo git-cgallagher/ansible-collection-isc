@@ -4,3 +4,5 @@ collections:
     version: ">=5.0.0"
   - name: community.general    # apk on Alpine
     version: ">=9.0.0"
+  - name: ansible.windows      # kea_dhcp_msdns on Windows domain controllers
+    version: ">=2.0.0"

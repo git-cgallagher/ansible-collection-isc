@@ -1,0 +1,58 @@
+---
+# kea_dhcp_msdns — prepares Active Directory / Microsoft DNS for Kea's
+# GSS-TSIG dynamic updates (kea_dhcp_dns_integration: ms-dns). Run it against
+# a domain controller; how Ansible reaches it (WinRM, SSH, ...) is up to your
+# inventory. Every value below can be overridden.
+
+# Backend: auto (Windows when the target is Windows, else Samba AD when
+# samba-tool exists), windows, or samba.
+kea_dhcp_msdns_backend: auto
+
+# AD DNS domain and Kerberos realm.
+kea_dhcp_msdns_domain: ""
+kea_dhcp_msdns_realm: "{{ kea_dhcp_msdns_domain | upper }}"
+
+# Service account Kea authenticates as. Its UPN is set to the client
+# principal: AD only issues tickets to a UPN, not to an SPN alone.
+kea_dhcp_msdns_service_account: kea
+# Required. Use Ansible Vault. Only applied when the account is created (and,
+# on Windows, when a keytab is generated: ktpass resets it).
+kea_dhcp_msdns_service_account_password: ""
+# Windows: DN of the OU for the account (empty = the default Users container).
+# Samba: passed to samba-tool as --userou (relative DN, e.g. "OU=Services").
+kea_dhcp_msdns_service_account_ou: ""
+kea_dhcp_msdns_client_principal: "DHCP/kea.{{ kea_dhcp_msdns_domain }}@{{ kea_dhcp_msdns_realm }}"
+# Windows: NetBIOS domain name for ktpass -mapuser (DOMAIN\account). Defaults
+# to the realm's first label; set it when your NetBIOS name differs.
+kea_dhcp_msdns_netbios_domain: "{{ kea_dhcp_msdns_realm.split('.') | first }}"
+
+# Grant update rights through the built-in DnsUpdateProxy group, which lets
+# Kea replace records a Windows client registered itself.
+kea_dhcp_msdns_dnsupdateproxy: true
+
+# Zones Kea updates. Missing zones are created (AD-integrated, domain-wide
+# replication). Reverse zones must exist before Kea updates them.
+kea_dhcp_msdns_forward_zones: ["{{ kea_dhcp_msdns_domain }}"]
+kea_dhcp_msdns_reverse_zones: []
+# Windows only: Secure (recommended) or NonsecureAndSecure.
+kea_dhcp_msdns_dynamic_update: Secure
+
+# Keytab: produced on the DC, fetched to this CONTROLLER path (mode 0600),
+# then deleted from the DC. Keep it out of any repository; encrypt it with
+# ansible-vault if you store it. Required.
+kea_dhcp_msdns_keytab_dest: ""
+# Only produce a keytab when kea_dhcp_msdns_keytab_dest doesn't exist yet,
+# unless this is true. On Windows a new keytab (ktpass) bumps the key version,
+# which invalidates keytabs already deployed to Kea hosts.
+kea_dhcp_msdns_keytab_rotate: false
+# Windows ktpass -crypto value.
+kea_dhcp_msdns_keytab_crypto: AES256-SHA1
+
+# Samba backend: credentials for samba-tool's DNS RPC calls (zone list and
+# create), and the DNS server to talk to.
+kea_dhcp_msdns_samba_admin_user: administrator
+kea_dhcp_msdns_samba_admin_password: ""
+kea_dhcp_msdns_samba_dns_server: 127.0.0.1
+# Samba backend: try `kinit` with the new keytab on the DC before handing it
+# over (skipped when kinit isn't installed).
+kea_dhcp_msdns_verify_keytab: true

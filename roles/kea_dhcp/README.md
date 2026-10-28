@@ -187,6 +187,75 @@ How the HA config is assembled:
 - **Shared lease database**: give several servers the same `kea_dhcp_lease_database` (`mysql`/`postgresql`) and no HA hook. Every server can answer any client. `kea_dhcp_db_schema_manage: true` runs `kea-admin db-init` once (and `db-upgrade` with `kea_dhcp_db_schema_upgrade`).
 - **Configuration backend**: use `kea_dhcp_config_backend` (`enabled`, `server_tag`, `config_databases`) so subnets live in SQL and each server pulls its own `server-tag`. `libdhcp_cb_cmds.so` remains an ISC subscriber hook. Add it with `kea_dhcp_dhcp4_hooks_libraries` if you have it.
 
+## DNS integration (dynamic DNS)
+
+`kea_dhcp_dns_integration` picks the DNS service Kea updates. The role loads a preset for it (`vars/dns/<integration>.yml`): the DHCP-side DDNS policy, the signing method, and provider-specific defaults. It then merges your `kea_dhcp_dns` over the preset, so anything you set wins. Choosing anything but `none` enables `kea-dhcp-ddns`.
+
+| `kea_dhcp_dns_integration` | DNS service | Updates signed with | Tested |
+|---|---|---|---|
+| `none` (default) | — | — | — |
+| `ms-dns` | Microsoft DNS on Active Directory DCs | GSS-TSIG (Kerberos) | Kerberos and GSS-TSIG key exchange against a Samba AD DC; signed updates against BIND (see below) |
+| `bind9-gss-tsig` | BIND 9, FreeIPA / IdM | GSS-TSIG (Kerberos) | End to end against an MIT KDC + BIND 9 |
+| `rfc2136` | BIND 9, PowerDNS, Knot… | TSIG shared key | End to end against BIND 9 |
+
+Settings shared by every provider:
+
+```yaml
+kea_dhcp_dns_integration: ms-dns
+kea_dhcp_dns:
+  domain: corp.example.com                   # forward zone corp.example.com. by default
+  servers:                                   # name = the DNS host's short name
+    - {name: dc1, ip: 10.0.0.10}
+    - {name: dc2, ip: 10.0.0.11}
+  reverse_zones: [0.0.10.in-addr.arpa]       # must already exist on the DNS server
+  keytab_src: "{{ playbook_dir }}/secrets/kea.keytab"   # GSS-TSIG; vault-encrypt it
+  dhcp_ddns_params: {}                       # override the preset's DHCP DDNS policy
+```
+
+Optional keys: `forward_zones`, `realm` (default: the domain upper-cased), `client_principal` (default `DHCP/kea.<domain>@<REALM>`), `kdcs` (default: the servers' IPs), `keytab_path`, `krb5_conf_path`, `gss` (GSS-TSIG hook parameter overrides), `install_krb5_tools` (adds `kinit`/`klist`), and `tsig_key` for `rfc2136`. `kea_dhcp_ddns_settings` is still merged last, for anything not covered here.
+
+### What the role sets up
+
+- **DDNS daemon zones:** the forward and reverse zones point at every server in `servers`, with the TSIG key name added for `rfc2136`.
+- **DHCP-side policy:** `ddns-send-updates`, `ddns-override-client-update`, `ddns-replace-client-name`, `ddns-conflict-resolution-mode`, and `ddns-qualifying-suffix` (the domain). `kea_dhcp_dhcp4_settings` / `kea_dhcp_dhcp6_settings` still override them.
+- **GSS-TSIG (`ms-dns`, `bind9-gss-tsig`):**
+  - **Hook:** ISC's `libddns_gss_tsig.so`, with one server entry per DNS server. Each entry's server principal is `DNS/<name>.<domain>@<REALM>`.
+  - **Package:** `isc-kea-gss-tsig`.
+  - **Files:** the keytab (copied from `keytab_src`, binary-safe; a vault-encrypted file is decrypted on the way) and a Kea-only `krb5.conf` in `/etc/kea`.
+  - **Environment:** `kea-dhcp-ddns` gets `KRB5_CONFIG` through a systemd drop-in (package mode), `-e` (container mode) or the pod spec (Kubernetes, where the keytab goes into the Secret's binary `data`). The host's own `/etc/krb5.conf`, for example an SSSD domain join, is never touched. If you run Kea's services yourself (`kea_dhcp_manage_service: false`), start `kea-dhcp-ddns` with `KRB5_CONFIG=/etc/kea/krb5.conf`.
+
+### Requirements by provider
+
+**`none`:** nothing. Kea hands out addresses and hostnames and never touches DNS.
+
+**`ms-dns` (Microsoft DNS / Active Directory):**
+- **Kea version and packages:** Kea 3.0 or newer from ISC's packages. ISC publishes no GSS-TSIG hook for 2.6, and distro packages don't ship it.
+- **AD service account with a keytab:**
+  - The account's **UPN must equal Kea's client principal** (`DHCP/kea.<domain>@<REALM>`). AD only issues tickets to a UPN, not to an SPN alone, and Windows' `ktpass -mapuser` sets it that way.
+  - It needs the SPN `DHCP/kea.<domain>`.
+  - [`kea_dhcp_msdns`](../kea_dhcp_msdns/README.md) does all of this, plus the keytab.
+- **Update rights:** membership in **DnsUpdateProxy**, or an explicit zone ACL. Without it, updates to records clients registered themselves are refused.
+- **Zones:** forward and reverse zones exist in AD, set to *Secure only* dynamic updates. Updating a reverse zone that doesn't exist fails with a misleading "Packet was replayed in wrong direction".
+- **`servers[].name`** is each DC's real host name. The DNS service principal is `DNS/<dc>.<domain>@<REALM>`.
+- **Time sync:** Kerberos tolerates 5 minutes of skew, so point Kea hosts and DCs at the same NTP source.
+- **Windows clients register their own A records.** The preset sets `ddns-override-client-update: true` so Kea owns them, and `ddns-conflict-resolution-mode: check-exists-with-dhcid`. Self-registered records carry no DHCID, so the default (`check-with-dhcid`) would never replace them.
+- **Preset flags:** `gss-replay-flag: false` (ISC reports anti-replay problems with Microsoft DNS) and `tkey-protocol: TCP`.
+- **What the tests cover:** Kerberos and the GSS-TSIG key exchange are verified against a Samba AD DC, and signed record updates are verified against BIND. Microsoft DNS Server's own signature check hasn't been exercised by this role's tests; ISC documents it as supported. Samba's built-in DNS server isn't a usable stand-in: it rejects Kea's signed updates, and even BIND's `nsupdate -g` can't verify its responses.
+
+**`bind9-gss-tsig` (BIND 9, FreeIPA / IdM):**
+- Kea 3.0 or newer from ISC's packages.
+- A Kerberos principal for Kea (default `DHCP/kea.<domain>@<REALM>`) and its keytab.
+- On the DNS server:
+  - BIND has `tkey-gssapi-keytab` pointing at the keytab for `DNS/<ns>.<domain>@<REALM>`.
+  - Each zone has an `update-policy` that grants Kea's principal, for example `grant "DHCP/kea.example.com@EXAMPLE.COM" wildcard * ANY;`. Quote the principal; BIND rejects an unquoted `/`.
+  - FreeIPA: add Kea's principal to the zone's update policy (`ipa dnszone-mod --update-policy`).
+- The preset keeps ISC's GSS defaults (`gss-replay-flag: true`).
+
+**`rfc2136` (TSIG):**
+- **Key:** a shared key, `kea_dhcp_dns.tsig_key: {name, secret, algorithm}` (default algorithm `HMAC-SHA256`). Keep the secret in Ansible Vault.
+- **DNS server:** the server knows the same key and allows it to update each zone. For example, BIND: `update-policy { grant kea-key wildcard * ANY; };`.
+- Works with any Kea version and package source.
+
 ## Containers on a host
 
 `kea_dhcp_deployment: container` runs ISC's Kea images on the inventory host with Podman or Docker, one systemd unit per daemon (`kea-dhcp4-container`, `kea-dhcp6-container`, `kea-dhcp-ddns-container`, and `kea-ctrl-agent-container` on 2.6). Use it on any systemd host where packages aren't an option, or to keep Kea's version independent of the OS.

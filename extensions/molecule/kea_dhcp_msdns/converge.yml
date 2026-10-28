@@ -1,0 +1,39 @@
+---
+- name: Prepare Active Directory with kea_dhcp_msdns
+  hosts: dc1
+  gather_facts: true
+  vars:
+    kea_dhcp_msdns_domain: lab.example
+    kea_dhcp_msdns_service_account_password: Kea-Svc-Molecule-1!
+    kea_dhcp_msdns_reverse_zones: [60.29.172.in-addr.arpa]
+    kea_dhcp_msdns_keytab_dest: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/kea.keytab"
+    kea_dhcp_msdns_samba_admin_password: Molecule-Only-1!
+  tasks:
+    - name: Apply kea_dhcp_msdns from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp_msdns
+
+- name: Deploy Kea with the ms-dns integration
+  hosts: kea-ms
+  gather_facts: false
+  vars:
+    kea_dhcp_bootstrap_python: true
+    kea_dhcp_manage_service: false
+    kea_dhcp_version_series: "3.0"
+    kea_dhcp_interfaces: [eth0]
+    kea_dhcp_dhcp4_settings:
+      subnet4:
+        - id: 1
+          subnet: 172.29.60.0/24
+          pools: [{pool: 172.29.60.100 - 172.29.60.200}]
+    kea_dhcp_dns_integration: ms-dns
+    kea_dhcp_dns:
+      domain: lab.example
+      servers: [{name: dc1, ip: 172.29.60.10}]
+      reverse_zones: [60.29.172.in-addr.arpa]
+      keytab_src: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/kea.keytab"
+      install_krb5_tools: true
+  tasks:
+    - name: Apply kea_dhcp from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp

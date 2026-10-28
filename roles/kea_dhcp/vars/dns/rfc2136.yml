@@ -2,11 +2,12 @@
 # kea_dhcp_dns_integration: rfc2136 — standard dynamic updates (RFC 2136)
 # signed with a shared TSIG key (RFC 8945): BIND 9, PowerDNS, Knot, NSD+, etc.
 # The DNS server must allow updates signed with that key for each zone.
-mode: tsig
-packages: []
-tsig_algorithm: HMAC-SHA256
-dhcp_ddns_params:
-  ddns-send-updates: true
-  ddns-override-client-update: true
-  ddns-replace-client-name: never
-  ddns-conflict-resolution-mode: check-with-dhcid
+kea_dhcp__dns_preset:
+  mode: tsig
+  packages: []
+  tsig_algorithm: HMAC-SHA256
+  dhcp_ddns_params:
+    ddns-send-updates: true
+    ddns-override-client-update: true
+    ddns-replace-client-name: never
+    ddns-conflict-resolution-mode: check-with-dhcid

@@ -1,0 +1,78 @@
+---
+- name: The AD objects kea_dhcp_msdns created
+  hosts: dc1
+  gather_facts: false
+  tasks:
+    - name: Read the service account
+      ansible.builtin.command:
+        argv: [samba-tool, user, show, kea, "--attributes=userPrincipalName,servicePrincipalName,memberOf"]
+      register: kea_ad_user
+      changed_when: false
+
+    - name: UPN equals the client principal, SPN and DnsUpdateProxy are set
+      ansible.builtin.assert:
+        that:
+          - "'userPrincipalName: DHCP/kea.lab.example@LAB.EXAMPLE' in kea_ad_user.stdout_lines"
+          - "'servicePrincipalName: DHCP/kea.lab.example' in kea_ad_user.stdout_lines"
+          - kea_ad_user.stdout is search('memberOf: CN=DnsUpdateProxy')
+        quiet: true
+
+    - name: The reverse zone exists
+      ansible.builtin.command:
+        argv: [samba-tool, dns, zonelist, 127.0.0.1, -U, administrator, --password=Molecule-Only-1!]
+      register: kea_ad_zones
+      changed_when: false
+      failed_when: kea_ad_zones.stdout is not search('60\.29\.172\.in-addr\.arpa')
+
+- name: Kea authenticates to the AD KDC with what the roles deployed
+  hosts: kea-ms
+  gather_facts: false
+  tasks:
+    - name: Get a ticket with the deployed keytab and Kea's krb5.conf
+      ansible.builtin.command:
+        argv: [kinit, -k, -t, /etc/kea/kea.keytab, DHCP/kea.lab.example@LAB.EXAMPLE]
+      environment:
+        KRB5_CONFIG: /etc/kea/krb5.conf
+        KRB5CCNAME: FILE:/tmp/kea-verify.ccache
+      changed_when: false
+
+    - name: Create the control socket directory Kea 3.x requires
+      ansible.builtin.file:
+        path: /var/run/kea
+        state: directory
+        owner: kea
+        group: kea
+        mode: "0750"
+
+    # kea-dhcp-ddns negotiates a GSS-TSIG key with the DC at startup.
+    - name: Start kea-dhcp-ddns with its log in a file
+      ansible.builtin.shell:
+        cmd: exec /usr/sbin/kea-dhcp-ddns -c /etc/kea/kea-dhcp-ddns.conf > /var/log/kea-ddns-verify.log 2>&1
+      environment:
+        KRB5_CONFIG: /etc/kea/krb5.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+    - name: GSS-TSIG key exchange with the AD DC succeeds
+      ansible.builtin.command:
+        cmd: grep -c GSS_TSIG_NEW_KEY_SETUP_SUCCEED /var/log/kea-ddns-verify.log
+      register: kea_ad_tkey
+      until: kea_ad_tkey.rc == 0
+      retries: 40
+      delay: 3
+      changed_when: false
+      failed_when: false
+
+    - name: Read the end of the kea-dhcp-ddns log
+      ansible.builtin.command:
+        cmd: tail -n 15 /var/log/kea-ddns-verify.log
+      register: kea_ad_log
+      changed_when: false
+      when: kea_ad_tkey.rc != 0
+
+    - name: Report the key exchange result
+      ansible.builtin.assert:
+        that: kea_ad_tkey.rc == 0
+        fail_msg: "No GSS-TSIG key from the DC. Log tail: {{ kea_ad_log.stdout_lines | default([]) }}"
+        quiet: true

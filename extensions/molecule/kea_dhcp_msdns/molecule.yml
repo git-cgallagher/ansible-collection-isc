@@ -1,0 +1,55 @@
+---
+# The AD side of kea_dhcp_dns_integration: ms-dns, against a Samba AD DC as a
+# stand-in for Windows (Windows DCs can't run in CI). The kea_dhcp_msdns role
+# prepares the DC (account, UPN, SPN, DnsUpdateProxy, zones, keytab), kea_dhcp
+# deploys Kea on Amazon Linux 2023 x86-64, and verify proves Kerberos end to
+# end: kinit with the deployed keytab, and kea-dhcp-ddns' GSS-TSIG key
+# exchange with the DC. Signed record updates are proven against BIND in
+# kea_dhcp_dns (Samba's own DNS server rejects them; see the role README).
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: dc1
+    hostname: dc1
+    image: debian:12
+    command: sleep infinity
+    pre_build_image: true
+    privileged: true   # samba-tool needs security.* xattrs
+    docker_networks: &kea_ad_network
+      - name: kea-ad
+        ipam_config:
+          - subnet: 172.29.60.0/24
+            gateway: 172.29.60.1
+    networks:
+      - name: kea-ad
+        ipv4_address: 172.29.60.10
+  - name: kea-ms
+    image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+    docker_networks: *kea_ad_network
+    networks:
+      - name: kea-ad
+        ipv4_address: 172.29.60.20
+provisioner:
+  name: ansible
+  env:
+    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
