@@ -1,0 +1,29 @@
+---
+# Each role must reject a bad value through its argument spec before it does
+# anything else. Run through tests/argument_specs/run.sh, which puts this
+# checkout on the collections path. Each case passes the bad value as an
+# include var, which the role inherits.
+- name: Argument specs are enforced at runtime
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Reject a bad kea_dhcp deployment
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: kea_dhcp, kea_dhcp_deployment: bogus }
+
+    - name: Reject a bad stork_server deploy mode
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: stork_server, stork_server_deploy_mode: bogus }
+
+    - name: Reject a non-integer stork_agent port
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: stork_agent, stork_agent_port: not-a-port }
+
+    - name: Reject a non-dict stork_repository key map
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: stork_repository, stork_repository_apk_keys: not-a-dict }
+
+    - name: Reject a bad kea_dhcp_msdns backend
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: kea_dhcp_msdns, kea_dhcp_msdns_backend: bogus }

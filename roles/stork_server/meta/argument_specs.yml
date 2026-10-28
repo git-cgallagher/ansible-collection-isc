@@ -1,0 +1,104 @@
+---
+argument_specs:
+  main:
+    short_description: ISC Stork server from packages or on Kubernetes
+    description:
+      - Installs and configures the Stork server, optionally with a local PostgreSQL.
+      - Rotates the admin/admin bootstrap password when stork_server_admin_password is set.
+    author:
+      - Chris Gallagher
+    options:
+      stork_server_deploy_mode:
+        type: str
+        description: ISC packages on this host, or a Deployment applied from the control node.
+        choices: [package, kubernetes]
+      stork_server_version:
+        type: str
+        description: Version to pin, e.g. "2.6.0". Empty installs the latest in the repository.
+      stork_server_rest_host:
+        type: str
+        description: Address the REST API and UI listen on.
+      stork_server_rest_port:
+        type: int
+        description: Port the REST API and UI listen on.
+      stork_server_tls:
+        type: dict
+        description: 'HTTPS for the REST API: {cert, key} file paths, plus ca for mutual TLS. Empty = plain HTTP.'
+      stork_server_enable_metrics:
+        type: bool
+        description: Serve Prometheus /metrics, which has no authentication.
+      stork_server_extra_env:
+        type: dict
+        description: Extra STORK_* settings for server.env (or the Deployment), e.g. OIDC.
+      stork_server_db_install_local:
+        type: bool
+        description: Install PostgreSQL on this host and create the role, database and pgcrypto. False = use an existing server.
+      stork_server_db_host:
+        type: str
+        description: PostgreSQL host.
+      stork_server_db_port:
+        type: int
+        description: PostgreSQL port.
+      stork_server_db_name:
+        type: str
+        description: Database name.
+      stork_server_db_user:
+        type: str
+        description: Database user.
+      stork_server_db_password:
+        type: str
+        no_log: true
+        description: Database password. Required; vault it.
+      stork_server_db_sslmode:
+        type: str
+        description: PostgreSQL sslmode. Defaults to disable for a local database, else require.
+        choices: [disable, allow, prefer, require, verify-ca, verify-full]
+      stork_server_admin_user:
+        type: str
+        description: Stork admin login.
+      stork_server_admin_password:
+        type: str
+        no_log: true
+        description: New admin password; the role replaces the bootstrap one. Must meet Stork's policy. Empty = no rotation.
+      stork_server_admin_bootstrap_password:
+        type: str
+        no_log: true
+        description: Password Stork boots with.
+      stork_server_k8s_namespace:
+        type: str
+        description: Namespace for the server objects.
+      stork_server_k8s_create_namespace:
+        type: bool
+        description: Create the namespace.
+      stork_server_k8s_kubeconfig:
+        type: str
+        description: Kubeconfig path. Empty = $KUBECONFIG or ~/.kube/config.
+      stork_server_k8s_context:
+        type: str
+        description: Kubeconfig context. Empty = current.
+      stork_server_k8s_state:
+        type: str
+        description: present applies the objects; absent removes them.
+        choices: [present, absent]
+      stork_server_k8s_apply:
+        type: bool
+        description: Apply to the cluster. False only renders (with stork_server_k8s_render_dir).
+      stork_server_k8s_render_dir:
+        type: str
+        description: Also write the manifests here. They contain the DB password.
+      stork_server_k8s_image:
+        type: str
+        description: Stork server image. Required in Kubernetes mode; ISC publishes none.
+      stork_server_k8s_service_type:
+        type: str
+        description: Service type for the REST API.
+        choices: [ClusterIP, NodePort, LoadBalancer]
+      stork_server_k8s_service_annotations:
+        type: dict
+        description: Annotations on the Service, e.g. for a cloud load balancer.
+      stork_server_k8s_resources:
+        type: dict
+        description: Container resources (requests/limits).
+      stork_server_k8s_api_url:
+        type: str
+        description: URL the control node uses for the password rotation in Kubernetes. Empty = skip the rotation.

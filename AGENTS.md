@@ -37,6 +37,7 @@ ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0
 tests/kea_dhcp/run.sh               # Kea render + kea -t (Docker; amd64 images)
+tests/argument_specs/run.sh         # every role: spec matches defaults, ansible-doc loads, bad input rejected
 molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
 molecule test -s kea_dhcp_ha3       # 3-node HA states + failover
 molecule test -s kea_dhcp_dns       # DDNS: GSS-TSIG + TSIG updates land in BIND
@@ -50,6 +51,13 @@ Sanity needs an `ansible_collections/git_cgallagher/isc` checkout:
 through a collections path created at run time. Never commit a directory
 symlink: ansible-test's `symlinks` check rejects it, and the old
 `tests/render/roles/kea_dhcp -> ../../..` link made ansible-lint recurse.
+
+**Argument specs.** Every role has `meta/argument_specs.yml`, and ansible-core
+validates it when the role starts. A new or renamed variable in
+`defaults/main.yml` needs a matching option there, with a type and
+description; secrets need `no_log: true`. The `argument-specs` workflow
+(`tests/argument_specs/check.py`) fails a PR that forgets. Variables starting
+with `_` or containing `__` are internal and exempt.
 
 ## Releasing (automated: every merge to main is released)
 

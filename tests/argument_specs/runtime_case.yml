@@ -1,0 +1,24 @@
+---
+- name: "Reject a bad value: {{ argspec_role }}"
+  block:
+    - name: "Include {{ argspec_role }}"
+      ansible.builtin.include_role:
+        name: "git_cgallagher.isc.{{ argspec_role }}"
+
+    - name: Record that the role got past validation
+      ansible.builtin.set_fact:
+        argspec_passed: true
+  rescue:
+    - name: The failure came from argument validation
+      ansible.builtin.assert:
+        that:
+          - not (argspec_passed | default(false))
+          - "'Validation of arguments failed' in (ansible_failed_result.msg | default(''))"
+        fail_msg: "{{ argspec_role }} failed, but not in argument validation: {{ ansible_failed_result.msg | default('') }}"
+        quiet: true
+  always:
+    - name: Fail if the role accepted the bad value
+      ansible.builtin.assert:
+        that: not (argspec_passed | default(false))
+        fail_msg: "{{ argspec_role }} accepted the bad value"
+        quiet: true

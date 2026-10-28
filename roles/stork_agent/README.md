@@ -46,7 +46,9 @@ it with `KEA_VERSION` equal to the Kea image's version: 3.0.4 is
 
 ## Role Variables
 
-Every variable is documented in [defaults/main.yml](defaults/main.yml). The
+Every variable is documented in [defaults/main.yml](defaults/main.yml) and
+validated by [meta/argument_specs.yml](meta/argument_specs.yml) when the role
+starts (`ansible-doc -t role git_cgallagher.isc.stork_agent` lists them). The
 main ones:
 
 | Variable | Default | Description |

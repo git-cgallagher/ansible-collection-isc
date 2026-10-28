@@ -1,0 +1,97 @@
+---
+argument_specs:
+  main:
+    short_description: ISC Stork agent next to an existing Kea
+    description:
+      - Installs the Stork agent next to Kea (package, container + systemd, or a Kubernetes sidecar spec) and registers it.
+      - Does not install Kea.
+    author:
+      - Chris Gallagher
+    options:
+      stork_agent_deploy_mode:
+        type: str
+        description: 'Where Kea runs: packages on this host, a container on this host, or a pod (the role outputs a sidecar spec).'
+        choices: [package, container, kubernetes]
+      stork_agent_version:
+        type: str
+        description: Package version to pin, e.g. "2.6.0". Empty installs the latest.
+      stork_agent_server_url:
+        type: str
+        description: Stork server URL the agent registers with. Required.
+      stork_agent_address:
+        type: str
+        description: Address the server uses to reach this agent.
+      stork_agent_port:
+        type: int
+        description: Agent listener port.
+      stork_agent_server_token:
+        type: str
+        no_log: true
+        description: Server token for unattended registration. Vault it.
+      stork_agent_api_user:
+        type: str
+        description: Stork login used to read the server token from the API.
+      stork_agent_api_password:
+        type: str
+        no_log: true
+        description: Password for stork_agent_api_user. Vault it.
+      stork_agent_api_url:
+        type: str
+        description: Stork API URL as seen from the control node.
+      stork_agent_skip_tls_verify:
+        type: bool
+        description: Skip TLS verification for the server and Kea.
+      stork_agent_prometheus_kea_port:
+        type: int
+        description: Prometheus Kea exporter port.
+      stork_agent_prometheus_kea_per_subnet_stats:
+        type: bool
+        description: Export per-subnet statistics.
+      stork_agent_extra_env:
+        type: dict
+        description: Extra STORK_AGENT_* settings.
+      stork_agent_kea_group:
+        type: str
+        description: Kea's system group, for read access to its config and credentials. Empty = detect.
+      stork_agent_image:
+        type: str
+        description: Agent image with Kea's binaries bundled. Required in container and Kubernetes modes.
+      stork_agent_container_runtime:
+        type: str
+        description: Container runtime; auto prefers podman.
+        choices: [auto, podman, docker]
+      stork_agent_container_pull:
+        type: bool
+        description: Pull the image on every run.
+      stork_agent_container_kea_mounts:
+        type: list
+        elements: str
+        description: Host paths shared read-only with the agent, at the same paths Kea uses. Missing ones are created.
+      stork_agent_k8s_volume_mounts:
+        type: list
+        elements: dict
+        description: Extra sidecar volumeMounts, using the Kea pod's volume names. Empty with kea_dhcp.
+      stork_agent_k8s_address:
+        type: str
+        description: Address advertised per pod. Prefer a stable name over $(POD_IP).
+      stork_agent_k8s_resources:
+        type: dict
+        description: Sidecar resources (requests/limits).
+      stork_agent_k8s_manage_secret:
+        type: bool
+        description: Store the registration token in a Secret in Kea's namespace.
+      stork_agent_k8s_namespace:
+        type: str
+        description: Kea's namespace. Required when the role manages the Secret.
+      stork_agent_k8s_create_namespace:
+        type: bool
+        description: Create Kea's namespace if it doesn't exist yet.
+      stork_agent_k8s_secret_name:
+        type: str
+        description: Name of the token Secret.
+      stork_agent_k8s_kubeconfig:
+        type: str
+        description: Kubeconfig path. Empty = $KUBECONFIG or ~/.kube/config.
+      stork_agent_k8s_context:
+        type: str
+        description: Kubeconfig context. Empty = current.

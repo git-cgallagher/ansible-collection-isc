@@ -20,7 +20,9 @@ servers.
 
 ## Role Variables
 
-Every variable is documented in [defaults/main.yml](defaults/main.yml). The
+Every variable is documented in [defaults/main.yml](defaults/main.yml) and
+validated by [meta/argument_specs.yml](meta/argument_specs.yml) when the role
+starts (`ansible-doc -t role git_cgallagher.isc.stork_server` lists them). The
 main ones:
 
 | Variable | Default | Description |

@@ -1,0 +1,42 @@
+name: argument-specs
+
+# Every role's meta/argument_specs.yml must match its defaults, load in
+# ansible-doc, and reject bad input at runtime. See tests/argument_specs/.
+# No path filter: the job is a required check and must always report.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PY_COLORS: '1'
+  ANSIBLE_FORCE_COLOR: '1'
+
+jobs:
+  argument-specs:
+    name: argument specs (${{ matrix.ansible }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest and newest ansible-core the collection's CI covers.
+        ansible: [stable-2.18, stable-2.21]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install ansible-core ${{ matrix.ansible }}
+        env:
+          ANSIBLE_BRANCH: ${{ matrix.ansible }}
+        run: |
+          minor="${ANSIBLE_BRANCH#stable-}"
+          pip install "ansible-core~=${minor}.0" PyYAML
+          ansible-galaxy collection install -r requirements.yml
+      - run: tests/argument_specs/run.sh

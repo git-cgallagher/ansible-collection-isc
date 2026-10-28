@@ -1,0 +1,22 @@
+---
+argument_specs:
+  main:
+    short_description: ISC's Cloudsmith Stork package repository
+    description:
+      - Adds the Stork repository for apt, dnf or apk. Used by the other Stork roles.
+    author:
+      - Chris Gallagher
+    options:
+      stork_repository_name:
+        type: str
+        description: Repository; stork has stable releases, stork-dev development ones.
+      stork_repository_base_url:
+        type: str
+        description: Cloudsmith base URL.
+      stork_repository_cloudsmith_token:
+        type: str
+        no_log: true
+        description: Entitlement token for ISC's private repositories. Empty = public. Vault it.
+      stork_repository_apk_keys:
+        type: dict
+        description: Alpine signing-key file name per repository; apk matches keys by file name.
