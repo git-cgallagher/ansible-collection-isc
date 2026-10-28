@@ -67,7 +67,11 @@ kea_dhcp_isc_repo_alpine_version: ""
 # elsewhere (add it via kea_dhcp_extra_repositories).
 kea_dhcp_epel_manage: true
 # Empty = "epel-release" (Rocky/Alma/CentOS Stream), or the release RPM URL on RHEL.
+# Amazon Linux 2023 gets a repo file for EPEL 9 restricted to log4cplus instead.
 kea_dhcp_epel_package: ""
+# ISC RPM repo path ("el/9", "fedora/42"); empty = derived from the host.
+# Amazon Linux 2023 maps to el/9 (ISC publishes no AL2023 builds).
+kea_dhcp_isc_repo_rpm_release: ""
 
 # Arbitrary additional repositories, e.g. an internal mirror. Each item:
 #   apt: {type: apt, name, uris, suites, components, signed_by}  (deb822)

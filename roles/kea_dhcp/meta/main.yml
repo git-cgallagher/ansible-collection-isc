@@ -19,6 +19,8 @@ galaxy_info:
       versions: ["8", "9", "10"]
     - name: Fedora
       versions: [all]
+    - name: Amazon Linux
+      versions: ["2023"]
   galaxy_tags:
     - dhcp
     - kea

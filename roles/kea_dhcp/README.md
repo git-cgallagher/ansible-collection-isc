@@ -25,15 +25,16 @@ Both paths build the Kea configuration the same way. The role computes the parts
   - `kubernetes.core`: for Kubernetes mode, plus the `kubernetes` Python package on the controller.
 - Package mode needs Python on the target. On minimal images, set `kea_dhcp_bootstrap_python: true` and `gather_facts: false`. RHEL-family hosts need `dnf`; `-minimal` images ship only `microdnf`, and the bootstrap installs `dnf` for you.
 - EL hosts (RHEL, Rocky, Alma and similar) need **EPEL**, because Kea's RPMs, ISC's and the distro's alike, depend on `log4cplus`. The role installs `epel-release` (or the release RPM on RHEL). Turn this off with `kea_dhcp_epel_manage: false` if you mirror EPEL yourself.
+- **Amazon Linux 2023** has no Kea packages of its own, and ISC's `amzn/2023` repositories are empty. The role therefore installs **ISC's EL9 RPMs**, which run there, and takes `log4cplus` from a repo file for EPEL 9 restricted to that one package (`includepkgs=log4cplus*`). Neither ISC nor Amazon supports this combination; it is tested in CI on x86_64. ISC's EL9 builds also exist for arm64 (Graviton), which was checked by hand.
 
 ### Supported platforms
 
 | Deployment | Platforms |
 |---|---|
-| Packages | Alpine 3.20+ (OpenRC) · Debian 12/13 · Ubuntu 22.04/24.04 · RHEL/Rocky/Alma 8–10 · Fedora (systemd) |
+| Packages | Alpine 3.20+ (OpenRC) · Debian 12/13 · Ubuntu 22.04/24.04 · RHEL/Rocky/Alma 8–10 · Fedora · Amazon Linux 2023, including minimal (systemd) |
 | Kubernetes | Talos · Amazon EKS · any conformant cluster (k3s, kubeadm, RKE2…) on **amd64** nodes (ISC images are amd64-only) |
 
-CI tests package installs on Debian 12, Ubuntu 24.04, Rocky 9 and Alpine 3.20/3.22. The other listed versions use the same package names and repositories but aren't tested.
+CI tests package installs on Debian 12, Ubuntu 24.04, Rocky 9, Amazon Linux 2023 (standard and minimal) and Alpine 3.20/3.22. The other listed versions use the same package names and repositories but aren't tested.
 
 ## Installation
 
@@ -260,7 +261,7 @@ tests/kea_dhcp/run.sh
 molecule test -s kea_dhcp
 ```
 
-`molecule test -s kea_dhcp` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
+`molecule test -s kea_dhcp` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Amazon Linux 2023 (standard and minimal), Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
 
 ```bash
 molecule test -s kea_dhcp_ha3
@@ -276,6 +277,8 @@ The Kubernetes path was also applied to a live 3-node kind cluster, in both the 
 - **ISC container images** run as root, but their binaries are owned by `kea:kea` with mode 0754. Dropping all capabilities therefore makes `exec` fail with *Permission denied*. Pods keep `NET_RAW`, `NET_BIND_SERVICE` and `DAC_OVERRIDE` (`kea_dhcp_k8s_capabilities`).
 - **ISC images are amd64-only** (see EKS specifics above).
 - **EL needs EPEL**: ISC's EL9 RPMs fail to install without it ("nothing provides liblog4cplus-2.0.so.3").
+- **Amazon Linux 2023 minimal**: `/usr/bin/dnf` is a symlink to `microdnf`, which has no `-q` option, and Python isn't installed. With `kea_dhcp_bootstrap_python: true`, the role first swaps `microdnf-dnf` for real `dnf`, then installs `python3` and `python3-dnf`.
+- **The Kea user without systemd**: EL RPMs create the `kea` user through `systemd-sysusers`, which only runs where systemd is installed. On hosts or containers without it, the role creates the user itself.
 - **Kea 3.2 locks down the HTTP API**: it rejects a control socket with neither TLS nor auth (*"Unsecured HTTP control channel"*), and rejects a clear-text `user` in basic auth. The role always writes `<user>.user` and `<user>.password` files and uses `user-file` / `password-file`, which work on 2.6, 3.0 and 3.2. It also fails fast if a 3.2 API would be unsecured.
 - **PID file on restarts**: on 2.6 in Kubernetes, `/var/run/kea` is an emptyDir shared with the control agent, so it survives a container restart. Kea then finds its own stale `PID 1` file and refuses to start. Pods set `KEA_PIDFILE_DIR=/tmp`.
 - **The control agent** is deprecated in 3.0 and **removed in 3.2**. Asking for it on 3.x fails fast.

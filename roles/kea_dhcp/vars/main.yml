@@ -90,3 +90,11 @@ kea_dhcp__daemons: >-
 # Pod-network deployments only ever see relayed (unicast) DHCP.
 kea_dhcp__service_mode: "{{ kea_dhcp_deployment == 'kubernetes' and kea_dhcp_k8s_network_mode == 'service' }}"
 kea_dhcp__dhcp4_socket_type: "{{ 'udp' if kea_dhcp__service_mode | bool else kea_dhcp_dhcp4_socket_type }}"
+
+# ISC Cloudsmith RPM path segment: fedora/<ver>, el/<major>, or el/9 for
+# Amazon Linux 2023 (ISC's amzn/2023 repos are empty; its EL9 builds work).
+kea_dhcp__isc_rpm_release: >-
+  {{ kea_dhcp_isc_repo_rpm_release if kea_dhcp_isc_repo_rpm_release | length > 0
+     else 'fedora/' ~ ansible_facts['distribution_major_version'] if ansible_facts['distribution'] == 'Fedora'
+     else 'el/9' if ansible_facts['distribution'] == 'Amazon'
+     else 'el/' ~ ansible_facts['distribution_major_version'] }}

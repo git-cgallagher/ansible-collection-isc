@@ -20,3 +20,30 @@
   ansible.builtin.package:
     name: "{{ kea_dhcp__packages }}"
     state: "{{ kea_dhcp_package_state }}"
+
+# EL RPMs create the Kea user through systemd-sysusers, which only runs where
+# systemd is installed. Minimal hosts and containers (e.g. AL2023 minimal)
+# can end up without it, and the config files are group-owned by that user.
+- name: Look up the Kea system user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ kea_dhcp__user }}"
+    fail_key: false
+
+- name: Create the Kea system user when the packages did not
+  when: getent_passwd[kea_dhcp__user] is none
+  block:
+    - name: Create the Kea group
+      ansible.builtin.group:
+        name: "{{ kea_dhcp__group }}"
+        system: true
+
+    - name: Create the Kea user
+      ansible.builtin.user:
+        name: "{{ kea_dhcp__user }}"
+        group: "{{ kea_dhcp__group }}"
+        system: true
+        home: "{{ kea_dhcp_data_dir }}"
+        create_home: false
+        shell: /sbin/nologin
+        comment: ISC Kea DHCP service user

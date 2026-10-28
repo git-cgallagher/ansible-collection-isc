@@ -35,6 +35,18 @@ platforms:
     platform: linux/amd64
     command: sleep infinity
     pre_build_image: true
+  # Amazon Linux 2023 runs ISC's EL9 RPMs (its own amzn/2023 repos are empty).
+  - name: kea-al2023
+    image: amazonlinux:2023
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
+  # Minimal: no Python, and /usr/bin/dnf is microdnf (bootstrap swaps it).
+  - name: kea-al2023-min
+    image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
+    platform: linux/amd64
+    command: sleep infinity
+    pre_build_image: true
 provisioner:
   name: ansible
   env:
@@ -56,6 +68,13 @@ provisioner:
         kea_dhcp_api_http_enabled: true
         kea_dhcp_api_auth_clients: [{user: stork, password: molecule-only}]  # 3.2 requires auth or TLS
         kea_dhcp_lease_cmds_enabled: true
+      kea-al2023:
+        kea_dhcp_version_series: "3.0"
+        kea_dhcp_dhcp6_enabled: true
+      kea-al2023-min:
+        kea_dhcp_version_series: "3.2"
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_auth_clients: [{user: stork, password: molecule-only}]  # 3.2 requires auth or TLS
       kea-alpine-isc:
         kea_dhcp_version_series: "3.0"
         kea_dhcp_isc_repo_alpine_version: "3.20"
