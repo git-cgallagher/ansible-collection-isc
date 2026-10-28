@@ -50,11 +50,13 @@ stork_agent_container_pull: true
 stork_agent_container_kea_mounts: [/etc/kea, /var/log/kea]
 
 # --- kubernetes mode ---
-# Mounts for the sidecar, using volume names from YOUR Kea pod. Paths must
-# match the Kea container's. Default suits a pod with a "config" volume at
-# /etc/kea; see README for git_cgallagher's kea_dhcp role.
-stork_agent_k8s_volume_mounts:
-  - { name: config, mountPath: /etc/kea, readOnly: true }
+# Extra mounts for the sidecar, using volume names from YOUR Kea pod, at the
+# same paths as in the Kea container: the agent opens the config file named on
+# Kea's command line and EVERY API client's user/password file it lists.
+# git_cgallagher.isc.kea_dhcp adds its own config mounts to the sidecar
+# (kea_dhcp_k8s_extra_containers_mount_config), so leave this empty with it.
+# For another Kea pod, e.g.: [{ name: config, mountPath: /etc/kea, readOnly: true }]
+stork_agent_k8s_volume_mounts: []
 # Address the server uses for each pod. Kubernetes expands $(VAR) from the
 # container env; POD_IP and POD_NAME are provided. Prefer a stable per-pod
 # Service name when you have one: pod IPs change on restart and the old
@@ -66,6 +68,9 @@ stork_agent_k8s_resources:
 # Store the registration token in a Secret the sidecar reads.
 stork_agent_k8s_manage_secret: true
 stork_agent_k8s_namespace: ""        # REQUIRED for the Secret: Kea's namespace
+# Create that namespace when it doesn't exist yet (this role usually runs
+# before the Kea role). Existing namespaces and their labels are left alone.
+stork_agent_k8s_create_namespace: true
 stork_agent_k8s_secret_name: stork-agent
 stork_agent_k8s_kubeconfig: ""
 stork_agent_k8s_context: ""

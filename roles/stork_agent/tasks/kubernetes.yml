@@ -39,6 +39,23 @@
     stork_agent_k8s_volumes:
       - { name: stork-agent-state, emptyDir: {} }
 
+# The agent role usually runs before the Kea role, so Kea's namespace may not
+# exist yet. Create it bare; the Kea role adds its own labels (e.g. Pod
+# Security) when it applies the namespace later.
+- name: Make sure Kea's namespace exists
+  kubernetes.core.k8s:
+    kubeconfig: "{{ stork_agent_k8s_kubeconfig | default(omit, true) }}"
+    context: "{{ stork_agent_k8s_context | default(omit, true) }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata: { name: "{{ stork_agent_k8s_namespace }}" }
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: stork_agent_k8s_manage_secret | bool and stork_agent_k8s_create_namespace | bool
+
 - name: Store the registration token in a Secret
   kubernetes.core.k8s:
     kubeconfig: "{{ stork_agent_k8s_kubeconfig | default(omit, true) }}"

@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.4.0 — 2026-10-28
+
+Fixes from the first live run of a Stork agent sidecar inside `kea_dhcp`
+pods (k3s, hot-standby pair). See
+[docs/stork-kubernetes.md](docs/stork-kubernetes.md).
+
+- **`kea_dhcp`**: new `kea_dhcp_k8s_extra_containers_mount_config`. It
+  defaults to `kea_dhcp_k8s_share_process_namespace`. It gives every extra
+  container the Kea containers' config mounts (config files, API credential
+  files, `kea_dhcp_files`) at the same paths. The Stork agent opens all of
+  them: it reads **every** API client's credential files, not only the
+  `stork…` client's.
+- **`kea_dhcp`**: in service network mode, each peer's `<instance>-ha`
+  Service also exposes the extra containers' TCP ports. A sidecar can then
+  register under that stable name instead of a pod IP. A pod IP leaves a
+  stale Stork machine behind on every restart.
+- **`stork_agent`**: `stork_agent_k8s_volume_mounts` now defaults to `[]`.
+  The old default, a directory mount of `config` at `/etc/kea`, never matched
+  `kea_dhcp`'s per-file `subPath` layout. If you used the default with
+  another Kea pod that has a `config` volume at `/etc/kea`, set it
+  explicitly.
+- **`stork_agent`**: new `stork_agent_k8s_create_namespace` (default `true`).
+  It creates Kea's namespace before writing the token Secret. Before, the
+  documented order (agent role, then Kea role) failed on a fresh cluster with
+  `namespaces "kea-dhcp" not found`.
+- **`stork_server`**: a refused `stork_server_admin_password` now fails with
+  Stork's reason, for example "password must include at least one special
+  character or whitespace", instead of a censored HTTP 400. Stork's default
+  policy is 12+ characters with upper and lower case, a digit and a special
+  character or space.
 ## 1.3.2 — 2026-10-28
 
 - Amazon Linux 2023 on x86-64 is now the primary tested platform for `kea_dhcp`:

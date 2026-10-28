@@ -509,6 +509,11 @@ argument_specs:
       kea_dhcp_k8s_share_process_namespace:
         type: bool
         description: Set shareProcessNamespace on Kea pods (needed for a Stork agent sidecar).
+      kea_dhcp_k8s_extra_containers_mount_config:
+        type: bool
+        description: >-
+          Add Kea's config-volume mounts to each extra container, at the same paths
+          (a Stork agent sidecar needs them). Defaults to kea_dhcp_k8s_share_process_namespace.
       kea_dhcp_k8s_capabilities:
         type: list
         description: Linux capabilities kept for Kea containers.

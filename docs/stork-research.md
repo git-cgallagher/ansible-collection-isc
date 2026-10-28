@@ -75,6 +75,11 @@ directly
   **Verified:** Kea 3.2.1 with `authentication.clients: [{user-file,
   password-file}]` (the layout `kea_dhcp` renders) is monitored and active,
   with the agent reading the files through Kea's group.
+  **Verified (2026-10-28):** the agent opens the files of *every* client,
+  not only the preferred one. With `ha` and `stork` clients and only the
+  `stork` files mounted, it logged "cannot read client credentials: could
+  not read the user file '/etc/kea/api-creds/ha.user'" and monitored
+  nothing.
 - **Registration** is `stork-agent register --non-interactive --server-url …
   --agent-host … [--server-token …]`.
   - With the server token, the machine is authorized at once. Without it,
@@ -94,11 +99,23 @@ directly
   `SYS_PTRACE` to read `/proc/<pid>/cwd`. That puts it above Pod Security
   "baseline": the namespace needs `privileged`. Talos enforces baseline
   cluster-wide by default; EKS enforces nothing.
-- Each restart gives the pod a new IP, and registration state lives in an
-  `emptyDir`, so `$(POD_IP)` addressing leaves stale machine entries behind.
-  Prefer a stable per-pod Service name.
-- **Verified on k3s 1.33, with an earlier version of these manifests:** an in-cluster server plus sidecar agents registered
-  unattended, and the bootstrap password rotated through a port-forward.
-- **This collection's own** server manifests and generated sidecar spec pass
-  `kubectl apply --dry-run=server`. They have not yet run live alongside a
-  `kea_dhcp` pod, which needs the `shareProcessNamespace` switch first.
+- **Verified (2026-10-28): Stork keys a machine on (address, port).**
+  - Re-registering at an existing address, with fresh certificates and
+    token, reuses the machine entry.
+  - Each pod restart under `$(POD_IP)` added an entry: three restarts left
+    three dead machines. Stork kept polling them, and one HA status lookup
+    still went to a dead daemon's agent.
+- **Verified:** a slow first registration (about 29 s, while the server was
+  timing out against dead agents) made `register` retry. The retries failed
+  with `duplicate key value violates unique constraint` ("Cannot store
+  machine"). The sidecar exits and recovers on the kubelet's restart.
+- **Verified:** the 2.6 admin password policy is 12+ characters, upper and
+  lower case, a digit and a special character or space. A refused change is
+  a 400 with a message naming the unmet rules.
+- **Verified on k3s 1.33 with this collection's roles:**
+  - the server in Kubernetes mode, with the password rotated through a
+    port-forward;
+  - sidecar agents in a `kea_dhcp` hot-standby pair (service mode, basic
+    auth), monitored with HA state visible.
+
+  See [stork-kubernetes.md](stork-kubernetes.md).

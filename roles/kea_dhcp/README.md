@@ -230,8 +230,17 @@ A config checksum annotation rolls the pod whenever the configuration changes.
 `kea_dhcp_k8s_share_process_namespace: true` and pass the agent role's
 `stork_agent_k8s_containers` and `stork_agent_k8s_volumes` to
 `kea_dhcp_k8s_extra_containers` and `kea_dhcp_k8s_extra_volumes`. The sidecar
-needs Pod Security `privileged`. See
-[docs/stork-kubernetes.md](../../docs/stork-kubernetes.md).
+needs Pod Security `privileged`. Two things help it:
+
+- `kea_dhcp_k8s_extra_containers_mount_config` (on by default when the
+  process namespace is shared) gives every extra container Kea's config, API
+  credential and `kea_dhcp_files` mounts, at the same paths. The agent opens
+  all of them.
+- In service network mode with HA, each peer's `<instance>-ha` Service also
+  carries the extra containers' TCP ports. That gives a sidecar a stable
+  address, which a pod IP is not.
+
+See [docs/stork-kubernetes.md](../../docs/stork-kubernetes.md).
 
 **GitOps:** set `kea_dhcp_k8s_apply: false` and `kea_dhcp_k8s_manifest_dir: ./rendered`. The role then writes one multi-document YAML file per instance. The Secret is in clear text, so encrypt it (SOPS or Sealed Secrets) before committing.
 
