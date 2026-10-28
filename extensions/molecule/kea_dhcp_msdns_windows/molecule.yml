@@ -54,7 +54,8 @@ provisioner:
         lab_realm: KEALAB.TEST
         # Throwaway VM reachable only on the runner's loopback.
         lab_dsrm_password: Example-not-secret-1
-        lab_kea_password: Example-not-secret-Kea-1
+        # Domain complexity rules reject a password containing the account name ("kea").
+        lab_kea_password: Example-not-secret-Dhcp-1
         # Leases Kea hands out (they never reach a wire: lease4-add) and the
         # reverse zone kea_dhcp_msdns creates for them.
         lab_subnet: 10.60.0.0/24
