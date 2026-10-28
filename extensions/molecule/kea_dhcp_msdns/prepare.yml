@@ -27,10 +27,11 @@
       changed_when: "'provisioned' in kea_ad_prov.stdout"
 
     # A daemon started by a plain command dies with its docker exec session:
-    # run samba in the foreground under Ansible's async wrapper.
+    # run samba in the foreground under Ansible's async wrapper. -F, not -i:
+    # interactive mode exits when async closes its stdin.
     - name: Start Samba (foreground, detached by async)
       ansible.builtin.command:
-        cmd: samba -i
+        cmd: samba -F
       async: 7200
       poll: 0
       changed_when: true

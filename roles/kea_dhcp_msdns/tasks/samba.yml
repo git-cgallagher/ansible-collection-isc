@@ -155,10 +155,30 @@
       failed_when: false
       when: kea_dhcp_msdns_verify_keytab | bool
 
+    # Check against this DC's own KDC with a throwaway krb5.conf: the host's
+    # (Samba writes one that finds KDCs via DNS SRV) may not resolve them.
+    - name: Write a krb5.conf for the keytab check
+      ansible.builtin.copy:
+        dest: "{{ kea_dhcp_msdns__tmp.path }}.krb5.conf"
+        mode: "0600"
+        content: |
+          [libdefaults]
+            default_realm = {{ kea_dhcp_msdns_realm }}
+            dns_lookup_kdc = false
+            rdns = false
+          [realms]
+            {{ kea_dhcp_msdns_realm }} = {
+              kdc = 127.0.0.1
+            }
+      when:
+        - kea_dhcp_msdns_verify_keytab | bool
+        - kea_dhcp_msdns__kinit.rc | default(1) == 0
+
     - name: Get a ticket with the new keytab
       ansible.builtin.command:
         argv: [kinit, -k, -t, "{{ kea_dhcp_msdns__tmp.path }}", "{{ kea_dhcp_msdns_client_principal }}"]
       environment:
+        KRB5_CONFIG: "{{ kea_dhcp_msdns__tmp.path }}.krb5.conf"
         KRB5CCNAME: "MEMORY:kea-dhcp-msdns"
       changed_when: false
       when:
@@ -171,10 +191,15 @@
         dest: "{{ kea_dhcp_msdns_keytab_dest }}"
         flat: true
   always:
-    - name: Remove the keytab from the DC
+    - name: Remove the keytab and check config from the DC
       ansible.builtin.file:
-        path: "{{ kea_dhcp_msdns__tmp.path }}"
+        path: "{{ kea_dhcp_msdns__cleanup }}"
         state: absent
+      loop:
+        - "{{ kea_dhcp_msdns__tmp.path }}"
+        - "{{ kea_dhcp_msdns__tmp.path }}.krb5.conf"
+      loop_control:
+        loop_var: kea_dhcp_msdns__cleanup
       when: kea_dhcp_msdns__tmp.path is defined
 
 - name: Restrict the fetched keytab on the controller

@@ -14,7 +14,7 @@
         that:
           - "'userPrincipalName: DHCP/kea.lab.example@LAB.EXAMPLE' in kea_ad_user.stdout_lines"
           - "'servicePrincipalName: DHCP/kea.lab.example' in kea_ad_user.stdout_lines"
-          - kea_ad_user.stdout is search('memberOf: CN=DnsUpdateProxy')
+          - "kea_ad_user.stdout is search('memberOf: CN=DnsUpdateProxy')"
         quiet: true
 
     - name: The reverse zone exists
@@ -54,9 +54,12 @@
       poll: 0
       changed_when: true
 
-    - name: GSS-TSIG key exchange with the AD DC succeeds
+    # At the role's INFO log level, kea-dhcp-ddns logs GSS_TSIG_NEW_KEY when it
+    # starts a key exchange and GSS_TSIG_NEW_KEY_SETUP_FAILED (WARN) if the DC
+    # rejects it; success itself is only logged at DEBUG.
+    - name: kea-dhcp-ddns starts a GSS-TSIG key exchange with the DC
       ansible.builtin.command:
-        cmd: grep -c GSS_TSIG_NEW_KEY_SETUP_SUCCEED /var/log/kea-ddns-verify.log
+        cmd: grep -c "GSS_TSIG_NEW_KEY " /var/log/kea-ddns-verify.log
       register: kea_ad_tkey
       until: kea_ad_tkey.rc == 0
       retries: 40
@@ -64,15 +67,20 @@
       changed_when: false
       failed_when: false
 
-    - name: Read the end of the kea-dhcp-ddns log
+    - name: Give the exchange time to fail if it is going to
+      ansible.builtin.wait_for:
+        timeout: 20
+
+    - name: Read the kea-dhcp-ddns log
       ansible.builtin.command:
-        cmd: tail -n 15 /var/log/kea-ddns-verify.log
+        cmd: cat /var/log/kea-ddns-verify.log
       register: kea_ad_log
       changed_when: false
-      when: kea_ad_tkey.rc != 0
 
-    - name: Report the key exchange result
+    - name: The DC accepted the key exchange
       ansible.builtin.assert:
-        that: kea_ad_tkey.rc == 0
-        fail_msg: "No GSS-TSIG key from the DC. Log tail: {{ kea_ad_log.stdout_lines | default([]) }}"
+        that:
+          - kea_ad_tkey.rc == 0
+          - "'GSS_TSIG_NEW_KEY_SETUP_FAILED' not in kea_ad_log.stdout"
+        fail_msg: "GSS-TSIG key exchange with the DC failed. Log tail: {{ kea_ad_log.stdout_lines[-15:] }}"
         quiet: true
