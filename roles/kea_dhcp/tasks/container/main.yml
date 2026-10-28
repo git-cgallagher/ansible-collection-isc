@@ -40,6 +40,10 @@
     quiet: true
 
 - name: Set container-mode facts
+  vars:
+    kea_dhcp__ro_dirs_now: >-
+      {{ ([kea_dhcp_config_dir, kea_dhcp_api_auth_dir] + (kea_dhcp_files | map(attribute='dest') | map('dirname') | list))
+         | unique | reject('match', '^' ~ (kea_dhcp_config_dir | regex_escape) ~ '/') | list }}
   ansible.builtin.set_fact:
     kea_dhcp__runtime: "{{ kea_dhcp__runtime_probe.stdout | trim }}"
     kea_dhcp__user: root
@@ -55,13 +59,14 @@
     kea_dhcp__platform_args: "{{ ['--platform', kea_dhcp_container_platform] if kea_dhcp_container_platform | length > 0 else [] }}"
     # Directories bind-mounted read-only at the same path: the config dir plus
     # any directory holding kea_dhcp_files or API credentials outside it.
-    kea_dhcp__container_ro_dirs: >-
-      {{ ([kea_dhcp_config_dir, kea_dhcp_api_auth_dir] + (kea_dhcp_files | map(attribute='dest') | map('dirname') | list))
-         | unique | reject('match', '^' ~ (kea_dhcp_config_dir | regex_escape) ~ '/') | list }}
+    # Directories bind-mounted read-only at the same path: the config dir plus
+    # any directory holding kea_dhcp_files or API credentials outside it.
+    kea_dhcp__container_ro_dirs: "{{ kea_dhcp__ro_dirs_now }}"
+    # " -v DIR:DIR:ro<opts>" for each read-only dir (pairs joined with ':', so
+    # no regex backreferences and no multi-line Jinja that YAML could split).
     kea_dhcp__ro_mount_args: >-
-      {% for dir in ([kea_dhcp_config_dir, kea_dhcp_api_auth_dir] + (kea_dhcp_files | map(attribute='dest') | map('dirname') | list))
-         | unique | reject('match', '^' ~ (kea_dhcp_config_dir | regex_escape) ~ '/') %}
-      -v {{ dir }}:{{ dir }}:ro{{ kea_dhcp_container_volume_options }}{% endfor %}
+      {{ kea_dhcp__ro_dirs_now | zip(kea_dhcp__ro_dirs_now) | map('join', ':')
+         | map('regex_replace', '^', ' -v ') | map('regex_replace', '$', ':ro' ~ kea_dhcp_container_volume_options) | join('') }}
 
 # Changed only when the image ID moves: podman prints "Writing manifest" even
 # for an up-to-date image.
