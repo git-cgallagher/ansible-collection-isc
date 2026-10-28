@@ -7,6 +7,7 @@ was previously the standalone Galaxy role `git-cgallagher.kea_dhcp`; see
 Installs and configures [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS, in one of two ways:
 
 - **Packages**: installs Kea on Alpine (OpenRC), Debian/Ubuntu or the RHEL family/Fedora (systemd), from ISC's repositories, your own mirrors, or the distro's packages.
+- **Containers on a host**: runs ISC's Kea images under systemd with Podman or Docker, on any systemd host.
 - **Kubernetes**: applies Kea to Talos, EKS or any conformant cluster from the controller, or only renders the manifests for GitOps.
 
 Both paths build the Kea configuration the same way. The role computes the parts that depend on the deployment (control sockets, hooks, HA peers, database hook libraries, loggers). It then deep-merges your own Kea settings on top, so **any Kea key can be set without a role change**.
@@ -182,6 +183,18 @@ How the HA config is assembled:
 - **Shared lease database**: give several servers the same `kea_dhcp_lease_database` (`mysql`/`postgresql`) and no HA hook. Every server can answer any client. `kea_dhcp_db_schema_manage: true` runs `kea-admin db-init` once (and `db-upgrade` with `kea_dhcp_db_schema_upgrade`).
 - **Configuration backend**: use `kea_dhcp_config_backend` (`enabled`, `server_tag`, `config_databases`) so subnets live in SQL and each server pulls its own `server-tag`. `libdhcp_cb_cmds.so` remains an ISC subscriber hook. Add it with `kea_dhcp_dhcp4_hooks_libraries` if you have it.
 
+## Containers on a host
+
+`kea_dhcp_deployment: container` runs ISC's Kea images on the inventory host with Podman or Docker, one systemd unit per daemon (`kea-dhcp4-container`, `kea-dhcp6-container`, `kea-dhcp-ddns-container`, and `kea-ctrl-agent-container` on 2.6). Use it on any systemd host where packages aren't an option, or to keep Kea's version independent of the OS.
+
+- **Runtime:** `kea_dhcp_container_runtime: auto` picks Podman if it's installed, otherwise Docker. The role doesn't install a runtime (Amazon Linux 2023: `dnf install docker`).
+- **Networking:** containers use `--network host`, so raw DHCP sockets, relays and HA listeners behave as with packages. Set `kea_dhcp_interfaces` to the host's NICs.
+- **Configs:** rendered on the host into `kea_dhcp_config_dir` and validated with `kea-<daemon> -t` **inside the image** before they're installed. They're bind-mounted read-only at the same paths, together with any directory holding `kea_dhcp_files` or API credentials, so every path in the config still holds.
+- **State:** leases live in `kea_dhcp_data_dir` on the host (mounted as `/var/lib/kea`). On 2.6, `kea_dhcp_container_run_dir` is shared as `/var/run/kea` between Kea and the control agent. `KEA_PIDFILE_DIR=/tmp` keeps stale PID files from blocking restarts.
+- **Images:** the same variables as Kubernetes mode: `kea_dhcp_k8s_images`, `kea_dhcp_k8s_image_tag` and `kea_dhcp_k8s_capabilities` (all others dropped). Images are pulled on every run, and units restart only when an image ID, config or unit actually changes.
+- **Architecture:** ISC's images are **linux/amd64 only**. On arm64 hosts, build your own images, or set `kea_dhcp_container_platform: linux/amd64` with emulation installed. For Graviton, package mode (EL9 RPMs on Amazon Linux 2023) runs natively instead.
+- **SELinux** (Podman on EL): set `kea_dhcp_container_volume_options: ",z"` so the bind mounts are relabelled.
+
 ## Kubernetes
 
 Inventory hosts are **logical Kea instances**, set to `ansible_connection: local`. Every API call runs on the controller through `kubernetes.core`, with the cluster chosen by `kea_dhcp_k8s_kubeconfig` / `kea_dhcp_k8s_context`. Each instance gets these objects:
@@ -266,6 +279,12 @@ molecule test -s kea_dhcp
 ```bash
 molecule test -s kea_dhcp_ha3
 ```
+
+```bash
+molecule test -s kea_dhcp_container
+```
+
+`molecule test -s kea_dhcp_container` runs container mode on two test nodes that each have systemd and their own Docker engine: Kea 3.0, and Kea 2.6 with its control agent. It checks that the units are running, that Kea answers `status-get` over its HTTP API (on 2.6 through the control agent and the shared socket), and that it answers again after the unit restarts.
 
 `molecule test -s kea_dhcp_ha3` builds a three-node primary + standby + backup cluster on Debian 12, with Kea 3.0 from ISC's packages. It starts Kea on each node and checks that kea1 and kea2 reach `hot-standby` and kea3 reaches `backup`. It then stops the primary and checks that the standby takes over (`partner-down`) while the backup stays passive.
 

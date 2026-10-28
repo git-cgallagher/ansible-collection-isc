@@ -10,9 +10,10 @@ argument_specs:
     options:
       kea_dhcp_deployment:
         type: str
-        description: 'Where Kea runs: OS packages on the inventory host, or Kubernetes from the controller.'
+        description: 'Where Kea runs: OS packages on the inventory host, ISC''s images under systemd on the host, or Kubernetes from the controller.'
         choices:
           - package
+          - container
           - kubernetes
       kea_dhcp_version_series:
         type: str
@@ -303,6 +304,29 @@ argument_specs:
         type: list
         description: Replace the computed loggers list.
         elements: dict
+      kea_dhcp_container_runtime:
+        type: str
+        description: Container runtime for container mode; auto = podman if installed, else docker.
+        choices:
+          - auto
+          - podman
+          - docker
+      kea_dhcp_container_pull:
+        type: bool
+        description: Pull the Kea images on every run (a change only when the image ID moves).
+      kea_dhcp_container_platform:
+        type: str
+        description: Image platform for container mode, e.g. linux/amd64 on arm64 hosts with emulation; empty = runtime default.
+      kea_dhcp_container_run_dir:
+        type: str
+        description: Host directory shared as /var/run/kea between Kea and the 2.6 control agent.
+      kea_dhcp_container_volume_options:
+        type: str
+        description: Extra bind-mount options, e.g. ",z" for SELinux relabelling with Podman on EL.
+      kea_dhcp_container_extra_args:
+        type: list
+        elements: str
+        description: Extra run arguments for every Kea container.
       kea_dhcp_k8s_platform:
         type: str
         description: Cluster flavour; selects defaults.

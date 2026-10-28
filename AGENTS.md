@@ -21,6 +21,7 @@ roles/stork_*            Stork server, agent, package repository
 docker/                  Stork image Dockerfiles (ISC publishes none)
 examples/kea_dhcp/       ready-to-adapt Kea inventories
 molecule/kea_dhcp/       Kea package installs on 5 distros (no init: configs validated, services not started)
+molecule/kea_dhcp_container/ Kea container mode: systemd + Docker in the node, Kea 3.0 and 2.6 + ctrl-agent
 molecule/kea_dhcp_ha3/   Kea 3-node HA (primary + standby + backup): starts Kea, checks states + failover
 molecule/stork/          Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
 tests/kea_dhcp/          render 8 Kea deployment shapes + `kea -t` in ISC 2.6/3.0/3.2 images
@@ -36,6 +37,7 @@ ansible-lint && yamllint .          # production profile, must stay at 0
 tests/kea_dhcp/run.sh               # Kea render + kea -t (Docker; amd64 images)
 molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
 molecule test -s kea_dhcp_ha3       # 3-node HA states + failover
+molecule test -s kea_dhcp_container # container mode (native-arch nodes; dockerd crashes under QEMU)
 molecule test -s stork
 ```
 
@@ -120,6 +122,9 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   renders itself as `0.0.0.0` and its partner as the partner's ClusterIP (verified live in
   Docker: both peers reach HOT-STANDBY).
 
+- Container mode tests need a NATIVE-arch test node: dockerd (Go) crashes under QEMU, so the
+  `kea_dhcp_container` node is built from its Dockerfile for the host's own architecture, and the
+  amd64 Kea images run inside it through binfmt (`kea_dhcp_container_platform: linux/amd64`).
 - Amazon Linux 2023: ISC's `amzn/2023` repos exist but are EMPTY (168-byte primary index), and AL2023
   ships no kea/log4cplus. The role maps AL2023 to ISC's `el/9` repo plus an EPEL 9 repo restricted to
   `log4cplus*` (`epel-release` needs `redhat-release`, which AL2023 lacks). AL2023 minimal's `dnf` is

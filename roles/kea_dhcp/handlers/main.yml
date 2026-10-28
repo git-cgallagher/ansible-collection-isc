@@ -1,13 +1,20 @@
 ---
 # Kea re-reads its config on SIGHUP, but a restart also reloads hook libraries
 # and HA peers cleanly, so the role restarts. Peers resync leases on start.
+# Container mode runs each daemon as a systemd unit too, so the same handlers
+# apply; the unit reload comes first so restarts pick up a changed unit.
+
+- name: Reload systemd for Kea container units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: kea_dhcp_deployment == 'container'
 
 - name: Restart Kea dhcp4
   ansible.builtin.service:
     name: "{{ kea_dhcp__services['dhcp4'] }}"
     state: restarted
   when:
-    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_deployment in ['package', 'container']
     - kea_dhcp_manage_service | bool
     - kea_dhcp_service_state != 'stopped'
     - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
@@ -19,7 +26,7 @@
     name: "{{ kea_dhcp__services['dhcp6'] }}"
     state: restarted
   when:
-    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_deployment in ['package', 'container']
     - kea_dhcp_manage_service | bool
     - kea_dhcp_service_state != 'stopped'
     - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
@@ -31,7 +38,7 @@
     name: "{{ kea_dhcp__services['ddns'] }}"
     state: restarted
   when:
-    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_deployment in ['package', 'container']
     - kea_dhcp_manage_service | bool
     - kea_dhcp_service_state != 'stopped'
     - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']
@@ -43,7 +50,7 @@
     name: "{{ kea_dhcp__services['ctrl_agent'] }}"
     state: restarted
   when:
-    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_deployment in ['package', 'container']
     - kea_dhcp_manage_service | bool
     - kea_dhcp_service_state != 'stopped'
     - kea_dhcp__service_manager | default('none') in ['systemd', 'openrc', 'sysvinit', 'service']

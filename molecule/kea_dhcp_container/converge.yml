@@ -1,0 +1,20 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    kea_dhcp_deployment: container
+    # ISC images are amd64-only; this also works on arm64 hosts with binfmt.
+    kea_dhcp_container_platform: linux/amd64
+    kea_dhcp_interfaces: [eth0]
+    kea_dhcp_api_http_enabled: true
+    kea_dhcp_api_auth_clients: [{user: admin, password: molecule-only}]
+    kea_dhcp_dhcp4_settings:
+      subnet4:
+        - id: 1
+          subnet: 192.0.2.0/24
+          pools: [{pool: 192.0.2.100 - 192.0.2.200}]
+  tasks:
+    - name: Apply the role from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp

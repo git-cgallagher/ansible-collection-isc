@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.0 — 2026-10-28
+
+- **`kea_dhcp`**: new deployment mode `container`. It runs ISC's Kea images on
+  the host with Podman or Docker, one systemd unit per daemon, with host
+  networking.
+  - Configs are validated with `kea -t` inside the image before they're
+    installed, then bind-mounted read-only at the same paths.
+  - Leases stay on the host. On 2.6, the control agent shares the socket
+    directory with Kea.
+  - Images are pulled on every run; units restart only when an image ID,
+    config or unit changes.
+  - New variables: `kea_dhcp_container_runtime`, `_pull`, `_platform`,
+    `_run_dir`, `_volume_options`, `_extra_args`.
+  - New Molecule scenario `kea_dhcp_container` (Kea 3.0, and 2.6 with the
+    control agent), also run in CI.
+
 ## 1.2.0 — 2026-10-28
 
 - **`kea_dhcp`**: Amazon Linux 2023 support, including the minimal image, on
