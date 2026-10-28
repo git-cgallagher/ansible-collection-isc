@@ -1,10 +1,11 @@
 ---
 # Three-node HA: primary + standby + backup, the layout recommended for a
-# VM-based deployment (examples/kea_dhcp/vm-ha3). Debian 12 hosts install
-# Kea 3.0 from ISC's packages. The containers have no init system, so
-# verify.yml starts kea-dhcp4 by hand, then checks the HA states and a real
-# failover. ISC publishes amd64 packages; on Apple silicon these run under
-# emulation.
+# VM-based deployment (examples/kea_dhcp/vm-ha3), on Amazon Linux 2023
+# minimal: no Python, microdnf as dnf, ISC's EL9 RPMs plus EPEL's log4cplus.
+# Pinned to linux/amd64, the deployment target (x86-64 VMs); on Apple silicon
+# these run under emulation. The containers have no
+# init system, so verify.yml starts kea-dhcp4 by hand, then checks the HA
+# states and a real failover.
 dependency:
   name: galaxy
   options:
@@ -13,7 +14,7 @@ driver:
   name: docker
 platforms:
   - name: kea1
-    image: debian:12-slim
+    image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
     command: sleep infinity
     pre_build_image: true
@@ -26,7 +27,7 @@ platforms:
       - name: kea-ha3
         ipv4_address: 172.29.30.11
   - name: kea2
-    image: debian:12-slim
+    image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
     command: sleep infinity
     pre_build_image: true
@@ -35,7 +36,7 @@ platforms:
       - name: kea-ha3
         ipv4_address: 172.29.30.12
   - name: kea3
-    image: debian:12-slim
+    image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
     command: sleep infinity
     pre_build_image: true

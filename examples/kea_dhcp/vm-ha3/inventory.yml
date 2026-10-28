@@ -1,5 +1,6 @@
 ---
-# Three Kea 3.0 VMs: primary + standby + backup (hot-standby).
+# Three Kea 3.0 Amazon Linux 2023 VMs (minimal works): primary + standby +
+# backup (hot-standby).
 #   - kea1 serves; kea2 takes over automatically if kea1 dies.
 #   - kea3 receives every lease update but never serves on its own. If both
 #     kea1 and kea2 are lost, promote it by hand (change its role to primary,
@@ -15,7 +16,8 @@ all:
         kea3: {ansible_host: 192.0.2.13}
       vars:
         kea_dhcp_version_series: "3.0"
-        kea_dhcp_interfaces: [eth0]
+        # AL2023's NIC name on EC2 Nitro; check `ip -br link` on your VMs.
+        kea_dhcp_interfaces: [ens5]
         kea_dhcp_ha_enabled: true
         kea_dhcp_ha_mode: hot-standby
         kea_dhcp_ha_peers:
