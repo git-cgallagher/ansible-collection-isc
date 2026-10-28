@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+# Kerberos settings for kea-dhcp-ddns only (KRB5_CONFIG points here); the
+# host's /etc/krb5.conf is left alone. KDCs are listed explicitly and DNS
+# canonicalization is off so the principals Kea uses are never rewritten.
+[libdefaults]
+  default_realm = {{ kea_dhcp__dns.realm }}
+  dns_lookup_kdc = false
+  dns_lookup_realm = false
+  rdns = false
+  dns_canonicalize_hostname = false
+  kdc_timesync = 1
+  forwardable = true
+
+[realms]
+  {{ kea_dhcp__dns.realm }} = {
+{% for kdc in kea_dhcp__dns.kdcs %}
+    kdc = {{ kdc }}
+{% endfor %}
+    admin_server = {{ kea_dhcp__dns.kdcs | first }}
+  }
+
+[domain_realm]
+  .{{ kea_dhcp__dns.domain }} = {{ kea_dhcp__dns.realm }}
+  {{ kea_dhcp__dns.domain }} = {{ kea_dhcp__dns.realm }}

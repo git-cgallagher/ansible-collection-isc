@@ -1,0 +1,46 @@
+---
+# dc1: a fresh Samba AD domain (LAB.EXAMPLE) with Samba's internal DNS. The
+# admin password is a test-only placeholder that never leaves this scenario.
+- name: Provision the Samba AD DC
+  hosts: dc1
+  gather_facts: false
+  tasks:
+    - name: Install Samba, Kerberos tools and Python
+      ansible.builtin.raw: >-
+        export DEBIAN_FRONTEND=noninteractive; apt-get update -qq &&
+        apt-get install -y -qq python3 procps samba winbind krb5-user bind9-dnsutils >/dev/null
+      changed_when: true
+
+    - name: Provision the domain
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          [ -f /var/lib/samba/private/sam.ldb ] && exit 0
+          rm -f /etc/samba/smb.conf
+          samba-tool domain provision --realm=LAB.EXAMPLE --domain=LAB --server-role=dc \
+            --dns-backend=SAMBA_INTERNAL --adminpass='Molecule-Only-1!' \
+            --host-name=dc1 --host-ip=172.29.60.10 >/dev/null
+          cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
+          echo provisioned
+        executable: /bin/bash
+      register: kea_ad_prov
+      changed_when: "'provisioned' in kea_ad_prov.stdout"
+
+    # A daemon started by a plain command dies with its docker exec session:
+    # run samba in the foreground under Ansible's async wrapper. -F, not -i:
+    # interactive mode exits when async closes its stdin.
+    - name: Start Samba (foreground, detached by async)
+      ansible.builtin.command:
+        cmd: samba -F
+      async: 7200
+      poll: 0
+      changed_when: true
+
+    - name: Wait for the DC's DNS to answer
+      ansible.builtin.command:
+        cmd: dig +short @127.0.0.1 dc1.lab.example A
+      register: kea_ad_dns
+      until: kea_ad_dns.stdout == '172.29.60.10'
+      retries: 40
+      delay: 3
+      changed_when: false

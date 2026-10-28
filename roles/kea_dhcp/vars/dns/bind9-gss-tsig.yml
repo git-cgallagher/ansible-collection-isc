@@ -1,0 +1,19 @@
+---
+# kea_dhcp_dns_integration: bind9-gss-tsig — BIND 9 (or FreeIPA/IdM) accepting
+# updates signed with GSS-TSIG (Kerberos, RFC 3645). BIND reads its service key
+# from `tkey-gssapi-keytab` and authorizes the Kea principal in `update-policy`.
+kea_dhcp__dns_preset:
+  mode: gss
+  packages: [gss_tsig]
+  server_principal_format: "DNS/{name}.{domain}@{realm}"
+  gss:
+    gss-replay-flag: true
+    gss-sequence-flag: false
+    tkey-protocol: TCP
+    tkey-lifetime: 3600
+    fallback: false
+  dhcp_ddns_params:
+    ddns-send-updates: true
+    ddns-override-client-update: true
+    ddns-replace-client-name: never
+    ddns-conflict-resolution-mode: check-with-dhcid

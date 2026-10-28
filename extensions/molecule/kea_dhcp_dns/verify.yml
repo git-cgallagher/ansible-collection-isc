@@ -1,0 +1,114 @@
+---
+# No init system: start kea-dhcp-ddns (with Kea's KRB5_CONFIG, as the role's
+# systemd drop-in would) and kea-dhcp4, create leases over the control socket,
+# ask Kea to send their DNS updates, then check the records ON ns1 (dig would
+# run under emulation on the amd64 Kea nodes).
+- name: Start Kea and send updates
+  hosts: kea-gss:kea-tsig
+  gather_facts: false
+  vars:
+    kea_dns_name: "{{ 'gss' if inventory_hostname == 'kea-gss' else 'tsig' }}"
+    kea_dns_domain: "{{ 'example.test' if inventory_hostname == 'kea-gss' else 'tsig.test' }}"
+    kea_dns_ip1: "{{ '172.29.50.111' if inventory_hostname == 'kea-gss' else '172.29.50.121' }}"
+    kea_dns_ip2: "{{ '172.29.50.112' if inventory_hostname == 'kea-gss' else '172.29.50.122' }}"
+    # Kept inline (not a .py file) so ansible-test doesn't treat it as collection code.
+    kea_dns_cmd_script: |
+      import json, socket, sys
+      def cmd(c):
+          s = socket.socket(socket.AF_UNIX)
+          s.connect("/var/run/kea/kea4-ctrl-socket")
+          s.sendall(json.dumps(c).encode())
+          d = b""
+          while True:
+              x = s.recv(65536)
+              if not x:
+                  break
+              d += x
+          r = json.loads(d)
+          return r[0] if isinstance(r, list) else r
+      name, ip = sys.argv[1], sys.argv[2]
+      add = cmd({"command": "lease4-add", "arguments": {"ip-address": ip, "hw-address": "1a:1b:1c:1d:1e:1f",
+                 "hostname": name, "fqdn-fwd": True, "fqdn-rev": True, "valid-lft": 3600}})
+      res = cmd({"command": "lease4-resend-ddns", "arguments": {"ip-address": ip}})
+      print(add["result"], res["result"])
+  tasks:
+    - name: Create the control socket directory Kea 3.x requires
+      ansible.builtin.file:
+        path: /var/run/kea
+        state: directory
+        owner: kea
+        group: kea
+        mode: "0750"
+
+    - name: Start kea-dhcp-ddns
+      ansible.builtin.command:
+        cmd: /usr/sbin/kea-dhcp-ddns -c /etc/kea/kea-dhcp-ddns.conf
+      environment:
+        KRB5_CONFIG: /etc/kea/krb5.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+    - name: Start kea-dhcp4
+      ansible.builtin.command:
+        cmd: /usr/sbin/kea-dhcp4 -c /etc/kea/kea-dhcp4.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+    - name: Install the control-socket helper
+      ansible.builtin.copy:
+        content: "{{ kea_dns_cmd_script }}"
+        dest: /usr/local/lib/kea-ddns-cmd.py
+        mode: "0644"
+
+    - name: Wait for the DHCPv4 control socket
+      ansible.builtin.wait_for:
+        path: /var/run/kea/kea4-ctrl-socket
+        timeout: 120
+
+    - name: Lease a first address and send its update
+      ansible.builtin.command:
+        cmd: "python3 /usr/local/lib/kea-ddns-cmd.py {{ kea_dns_name }}.{{ kea_dns_domain }}. {{ kea_dns_ip1 }}"
+      register: kea_dns_first
+      changed_when: true
+      failed_when: kea_dns_first.stdout != '0 0'
+
+    - name: Forward record lands on ns1
+      ansible.builtin.command:
+        cmd: "dig +short @127.0.0.1 {{ kea_dns_name }}.{{ kea_dns_domain }} A"
+      register: kea_dns_a1
+      until: kea_dns_a1.stdout == kea_dns_ip1
+      retries: 30
+      delay: 3
+      changed_when: false
+      delegate_to: ns1
+
+    - name: Reverse record lands on ns1
+      ansible.builtin.command:
+        cmd: "dig +short @127.0.0.1 -x {{ kea_dns_ip1 }}"
+      register: kea_dns_ptr1
+      until: kea_dns_ptr1.stdout == kea_dns_name ~ '.' ~ kea_dns_domain ~ '.'
+      retries: 30
+      delay: 3
+      changed_when: false
+      delegate_to: ns1
+
+    # Same client (same hw address, so same DHCID) on a new address: the
+    # update must replace the existing A record (the conflict-resolution path).
+    - name: Move the client to a second address and send its update
+      ansible.builtin.command:
+        cmd: "python3 /usr/local/lib/kea-ddns-cmd.py {{ kea_dns_name }}.{{ kea_dns_domain }}. {{ kea_dns_ip2 }}"
+      register: kea_dns_second
+      changed_when: true
+      failed_when: kea_dns_second.stdout != '0 0'
+
+    - name: Forward record follows the client to its new address
+      ansible.builtin.command:
+        cmd: "dig +short @127.0.0.1 {{ kea_dns_name }}.{{ kea_dns_domain }} A"
+      register: kea_dns_a2
+      until: kea_dns_a2.stdout == kea_dns_ip2
+      retries: 30
+      delay: 3
+      changed_when: false
+      delegate_to: ns1

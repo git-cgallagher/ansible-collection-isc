@@ -38,7 +38,8 @@ which is retired. See [Migrating](#migrating).
 
 | Role | Description |
 |---|---|
-| [`git_cgallagher.isc.kea_dhcp`](roles/kea_dhcp/README.md) | Kea DHCPv4/v6/DDNS from packages or on Kubernetes. HA (hot-standby, load-balancing, passive-backup, hub-and-spoke), shared SQL leases, config backend, HTTP(S) API with auth. |
+| [`git_cgallagher.isc.kea_dhcp`](roles/kea_dhcp/README.md) | Kea DHCPv4/v6/DDNS from packages, as containers on a host, or on Kubernetes. HA (hot-standby, load-balancing, passive-backup, hub-and-spoke), shared SQL leases, config backend, HTTP(S) API with auth, and dynamic DNS for Microsoft DNS / AD, BIND (GSS-TSIG) or any RFC 2136 server (TSIG). |
+| [`git_cgallagher.isc.kea_dhcp_msdns`](roles/kea_dhcp_msdns/README.md) | Prepares Active Directory / Microsoft DNS (or Samba AD) for Kea's GSS-TSIG updates: service account with UPN, SPN, DnsUpdateProxy, zones, keytab. Windows and Samba backends. |
 | [`git_cgallagher.isc.stork_server`](roles/stork_server/README.md) | Stork server: packages + optional local PostgreSQL, or a Kubernetes Deployment. Rotates the `admin`/`admin` bootstrap password. |
 | [`git_cgallagher.isc.stork_agent`](roles/stork_agent/README.md) | Stork agent next to Kea: native package, container + systemd, or a Kubernetes sidecar spec for the Kea pod. Unattended registration. |
 | [`git_cgallagher.isc.stork_repository`](roles/stork_repository/README.md) | ISC's Cloudsmith Stork package repository (deb/rpm/apk). Used by the Stork roles. |

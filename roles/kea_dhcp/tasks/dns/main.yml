@@ -1,0 +1,78 @@
+---
+# Resolve kea_dhcp_dns_integration into kea_dhcp__dns: the provider preset
+# (vars/dns/<integration>.yml defines the internal kea_dhcp__dns_preset dict,
+# so it never collides with your vars), derived defaults, then kea_dhcp_dns on top.
+
+- name: Load the DNS integration preset
+  ansible.builtin.include_vars:
+    file: "dns/{{ kea_dhcp_dns_integration }}.yml"
+
+- name: Resolve DNS integration settings
+  vars:
+    kea_dhcp__dns_user: "{{ kea_dhcp_dns }}"
+    kea_dhcp__dns_domain: "{{ kea_dhcp__dns_user.domain | default('') | regex_replace('\\.$', '') }}"
+    kea_dhcp__dns_realm: "{{ kea_dhcp__dns_user.realm | default(kea_dhcp__dns_domain | upper) }}"
+    kea_dhcp__dns_servers: >-
+      {{ kea_dhcp__dns_user.servers | default([])
+         | map('ansible.builtin.combine', {}) | list }}
+    kea_dhcp__dns_derived:
+      domain: "{{ kea_dhcp__dns_domain }}"
+      realm: "{{ kea_dhcp__dns_realm }}"
+      forward_zones: "{{ [kea_dhcp__dns_domain ~ '.'] if kea_dhcp__dns_domain | length > 0 else [] }}"
+      reverse_zones: []
+      client_principal: "DHCP/kea.{{ kea_dhcp__dns_domain }}@{{ kea_dhcp__dns_realm }}"
+      keytab_path: "{{ kea_dhcp_config_dir }}/kea.keytab"
+      krb5_conf_path: "{{ kea_dhcp_config_dir }}/krb5.conf"
+      kdcs: "{{ kea_dhcp__dns_servers | map(attribute='ip') | list }}"
+      install_krb5_tools: false
+  ansible.builtin.set_fact:
+    kea_dhcp__dns: >-
+      {{ kea_dhcp__dns_preset
+         | combine(kea_dhcp__dns_derived)
+         | combine(kea_dhcp__dns_user, recursive=true) }}
+
+- name: Assert the DNS integration is complete
+  when: kea_dhcp__dns.mode != 'none'
+  block:
+    - name: Assert the common DNS settings
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp__dns.domain | length > 0
+          - kea_dhcp__dns.servers | default([]) | length > 0
+          - kea_dhcp__dns.servers | rejectattr('ip', 'defined') | list | length == 0
+          - kea_dhcp__dns.servers | rejectattr('name', 'defined') | list | length == 0
+          - kea_dhcp_ddns_enabled | bool
+        fail_msg: >-
+          kea_dhcp_dns_integration={{ kea_dhcp_dns_integration }} needs kea_dhcp_dns.domain and
+          kea_dhcp_dns.servers ([{name, ip}]), and kea_dhcp_ddns_enabled must stay true.
+        quiet: true
+
+    - name: Assert the GSS-TSIG requirements
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp__v3 | bool
+          - kea_dhcp__dns.keytab_src | default('') | length > 0
+          - kea_dhcp__dns.realm | length > 0
+          - kea_dhcp_deployment != 'package' or kea_dhcp_package_source != 'distro'
+          # The systemd drop-in is how a managed kea-dhcp-ddns gets KRB5_CONFIG.
+          - >-
+            kea_dhcp_deployment != 'package' or not kea_dhcp_manage_service | bool
+            or ansible_facts['service_mgr'] | default('systemd') == 'systemd'
+        fail_msg: >-
+          GSS-TSIG ({{ kea_dhcp_dns_integration }}) needs Kea 3.0 or newer (ISC ships no
+          public 2.6 gss-tsig hook), kea_dhcp_dns.keytab_src (controller path to the
+          keytab), and in package mode ISC packages, with services managed by systemd
+          (or kea_dhcp_manage_service: false, and you start kea-dhcp-ddns with
+          KRB5_CONFIG={{ kea_dhcp_config_dir }}/krb5.conf yourself).
+        quiet: true
+      when: kea_dhcp__dns.mode == 'gss'
+
+    - name: Assert the TSIG key
+      ansible.builtin.assert:
+        that:
+          - kea_dhcp__dns.tsig_key.name | default('') | length > 0
+          - kea_dhcp__dns.tsig_key.secret | default('') | length > 0
+        fail_msg: "rfc2136 needs kea_dhcp_dns.tsig_key: {name, secret, algorithm}."
+        quiet: true
+      when: kea_dhcp__dns.mode == 'tsig'
+      no_log: true

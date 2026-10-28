@@ -1,0 +1,116 @@
+---
+# Windows AD DC backend: ActiveDirectory and DnsServer PowerShell modules,
+# plus ktpass. Secrets go in as script parameters, not on a command line,
+# except ktpass, which only takes the password as an argument (no_log hides it
+# from Ansible output; it is briefly visible in the DC's process list).
+
+- name: Ensure the service account, UPN and SPN
+  ansible.windows.win_powershell:
+    parameters:
+      Account: "{{ kea_dhcp_msdns_service_account }}"
+      Password: "{{ kea_dhcp_msdns_service_account_password }}"
+      Upn: "{{ kea_dhcp_msdns_client_principal }}"
+      Spn: "{{ kea_dhcp_msdns__spn }}"
+      Ou: "{{ kea_dhcp_msdns_service_account_ou }}"
+      UpdateProxy: "{{ kea_dhcp_msdns_dnsupdateproxy | bool }}"
+    script: |
+      param($Account, $Password, $Upn, $Spn, $Ou, [bool]$UpdateProxy)
+      $ErrorActionPreference = 'Stop'
+      Import-Module ActiveDirectory
+      $user = Get-ADUser -Filter "SamAccountName -eq '$Account'" -Properties servicePrincipalName, userPrincipalName
+      if (-not $user) {
+          $secure = ConvertTo-SecureString $Password -AsPlainText -Force
+          $new = @{ Name = $Account; SamAccountName = $Account; UserPrincipalName = $Upn
+                    AccountPassword = $secure; Enabled = $true; PasswordNeverExpires = $true
+                    Description = 'ISC Kea DHCP dynamic DNS updates (GSS-TSIG)' }
+          if ($Ou) { $new.Path = $Ou }
+          New-ADUser @new
+          $Ansible.Changed = $true
+          $user = Get-ADUser -Identity $Account -Properties servicePrincipalName, userPrincipalName
+      }
+      # AD only issues tickets to a UPN: it must equal the client principal.
+      if ($user.userPrincipalName -ne $Upn) {
+          Set-ADUser -Identity $Account -UserPrincipalName $Upn
+          $Ansible.Changed = $true
+      }
+      if ($user.servicePrincipalName -notcontains $Spn) {
+          Set-ADUser -Identity $Account -ServicePrincipalNames @{ Add = $Spn }
+          $Ansible.Changed = $true
+      }
+      if ($UpdateProxy) {
+          $members = Get-ADGroupMember -Identity DnsUpdateProxy | Select-Object -ExpandProperty SamAccountName
+          if ($members -notcontains $Account) {
+              Add-ADGroupMember -Identity DnsUpdateProxy -Members $Account
+              $Ansible.Changed = $true
+          }
+      }
+  no_log: true
+
+- name: Ensure the zones exist with secure dynamic updates
+  ansible.windows.win_powershell:
+    parameters:
+      Zones: "{{ kea_dhcp_msdns_forward_zones + kea_dhcp_msdns_reverse_zones }}"
+      DynamicUpdate: "{{ kea_dhcp_msdns_dynamic_update }}"
+    script: |
+      param([string[]]$Zones, $DynamicUpdate)
+      $ErrorActionPreference = 'Stop'
+      Import-Module DnsServer
+      foreach ($name in $Zones) {
+          $name = $name.TrimEnd('.')
+          $zone = Get-DnsServerZone -Name $name -ErrorAction SilentlyContinue
+          if (-not $zone) {
+              Add-DnsServerPrimaryZone -Name $name -ReplicationScope Domain -DynamicUpdate $DynamicUpdate
+              $Ansible.Changed = $true
+          } elseif ($zone.DynamicUpdate -ne $DynamicUpdate) {
+              Set-DnsServerPrimaryZone -Name $name -DynamicUpdate $DynamicUpdate
+              $Ansible.Changed = $true
+          }
+      }
+
+- name: Produce and fetch the keytab
+  when: kea_dhcp_msdns__make_keytab | bool
+  block:
+    - name: Create a temporary path on the DC
+      ansible.windows.win_tempfile:
+        state: file
+        suffix: .keytab
+      register: kea_dhcp_msdns__wtmp
+
+    # ktpass maps the principal onto the account (UPN), sets its password and
+    # writes the keytab. It bumps the key version: earlier keytabs stop working.
+    - name: Generate the keytab with ktpass
+      ansible.windows.win_powershell:
+        parameters:
+          Principal: "{{ kea_dhcp_msdns_client_principal }}"
+          MapUser: "{{ kea_dhcp_msdns_netbios_domain }}\\{{ kea_dhcp_msdns_service_account }}"
+          Password: "{{ kea_dhcp_msdns_service_account_password }}"
+          Crypto: "{{ kea_dhcp_msdns_keytab_crypto }}"
+          Out: "{{ kea_dhcp_msdns__wtmp.path }}"
+        script: |
+          param($Principal, $MapUser, $Password, $Crypto, $Out)
+          $ErrorActionPreference = 'Stop'
+          Remove-Item -LiteralPath $Out -Force -ErrorAction SilentlyContinue
+          & ktpass.exe -princ $Principal -mapuser $MapUser -pass $Password -mapop set `
+              -ptype KRB5_NT_PRINCIPAL -crypto $Crypto -out $Out | Out-Null
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Out)) { throw "ktpass failed ($LASTEXITCODE)" }
+          $Ansible.Changed = $true
+      no_log: true
+
+    - name: Fetch the keytab to the controller
+      ansible.builtin.fetch:
+        src: "{{ kea_dhcp_msdns__wtmp.path }}"
+        dest: "{{ kea_dhcp_msdns_keytab_dest }}"
+        flat: true
+  always:
+    - name: Remove the keytab from the DC
+      ansible.windows.win_file:
+        path: "{{ kea_dhcp_msdns__wtmp.path }}"
+        state: absent
+      when: kea_dhcp_msdns__wtmp.path is defined
+
+- name: Restrict the fetched keytab on the controller
+  ansible.builtin.file:
+    path: "{{ kea_dhcp_msdns_keytab_dest }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false

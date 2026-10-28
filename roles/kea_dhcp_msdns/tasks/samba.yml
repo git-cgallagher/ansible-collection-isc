@@ -1,0 +1,210 @@
+---
+# Samba AD DC backend (samba-tool, plus ldb-tools for the UPN). Runs as root
+# on the DC. samba-tool takes passwords on its command line; tasks carrying
+# them are no_log, but the values are briefly visible in the DC's process list.
+
+- name: Assert samba-tool is available
+  ansible.builtin.command:
+    cmd: samba-tool --version
+  changed_when: false
+
+- name: Install ldb-tools (ldbsearch/ldbmodify, used to set the UPN)
+  ansible.builtin.package:
+    name: ldb-tools
+    state: present
+
+- name: Look up the service account
+  ansible.builtin.command:
+    argv: [samba-tool, user, show, "{{ kea_dhcp_msdns_service_account }}"]
+  register: kea_dhcp_msdns__user
+  changed_when: false
+  failed_when: false
+
+- name: Create the service account
+  ansible.builtin.command:
+    argv: >-
+      {{ ['samba-tool', 'user', 'create', kea_dhcp_msdns_service_account, kea_dhcp_msdns_service_account_password]
+         + (['--userou=' ~ kea_dhcp_msdns_service_account_ou] if kea_dhcp_msdns_service_account_ou | length > 0 else []) }}
+  when: kea_dhcp_msdns__user.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Keep the service account's password from expiring
+  ansible.builtin.command:
+    argv: [samba-tool, user, setexpiry, "{{ kea_dhcp_msdns_service_account }}", --noexpiry]
+  when: kea_dhcp_msdns__user.rc != 0
+  changed_when: true
+
+- name: Read the account's DN and UPN
+  ansible.builtin.command:
+    argv:
+      - ldbsearch
+      - -H
+      - /var/lib/samba/private/sam.ldb
+      - "(sAMAccountName={{ kea_dhcp_msdns_service_account }})"
+      - dn
+      - userPrincipalName
+  register: kea_dhcp_msdns__ldb
+  changed_when: false
+
+# AD only issues tickets to a UPN, so the client principal must be the UPN
+# (Windows' ktpass -mapuser does the same).
+- name: Set the UPN to the client principal
+  ansible.builtin.command:
+    argv: [ldbmodify, -H, /var/lib/samba/private/sam.ldb]
+    stdin: |
+      dn: {{ kea_dhcp_msdns__ldb.stdout | regex_search('^dn: (.*)$', '\1', multiline=True) | first }}
+      changetype: modify
+      replace: userPrincipalName
+      userPrincipalName: {{ kea_dhcp_msdns_client_principal }}
+  when: >-
+    ('userPrincipalName: ' ~ kea_dhcp_msdns_client_principal) not in kea_dhcp_msdns__ldb.stdout_lines
+  changed_when: true
+
+- name: List the account's SPNs
+  ansible.builtin.command:
+    argv: [samba-tool, spn, list, "{{ kea_dhcp_msdns_service_account }}"]
+  register: kea_dhcp_msdns__spns
+  changed_when: false
+
+- name: Add the SPN
+  ansible.builtin.command:
+    argv: [samba-tool, spn, add, "{{ kea_dhcp_msdns__spn }}", "{{ kea_dhcp_msdns_service_account }}"]
+  when: kea_dhcp_msdns__spn not in kea_dhcp_msdns__spns.stdout
+  changed_when: true
+
+- name: List DnsUpdateProxy members
+  ansible.builtin.command:
+    argv: [samba-tool, group, listmembers, DnsUpdateProxy]
+  register: kea_dhcp_msdns__proxy
+  changed_when: false
+  when: kea_dhcp_msdns_dnsupdateproxy | bool
+
+- name: Add the account to DnsUpdateProxy
+  ansible.builtin.command:
+    argv: [samba-tool, group, addmembers, DnsUpdateProxy, "{{ kea_dhcp_msdns_service_account }}"]
+  when:
+    - kea_dhcp_msdns_dnsupdateproxy | bool
+    - kea_dhcp_msdns_service_account not in kea_dhcp_msdns__proxy.stdout_lines
+  changed_when: true
+
+- name: List DNS zones
+  ansible.builtin.command:
+    argv:
+      - samba-tool
+      - dns
+      - zonelist
+      - "{{ kea_dhcp_msdns_samba_dns_server }}"
+      - -U
+      - "{{ kea_dhcp_msdns_samba_admin_user }}"
+      - "--password={{ kea_dhcp_msdns_samba_admin_password }}"
+  register: kea_dhcp_msdns__zones
+  changed_when: false
+  no_log: true
+
+- name: Create missing zones
+  ansible.builtin.command:
+    argv:
+      - samba-tool
+      - dns
+      - zonecreate
+      - "{{ kea_dhcp_msdns_samba_dns_server }}"
+      - "{{ kea_dhcp_msdns_zone }}"
+      - -U
+      - "{{ kea_dhcp_msdns_samba_admin_user }}"
+      - "--password={{ kea_dhcp_msdns_samba_admin_password }}"
+  loop: "{{ kea_dhcp_msdns_forward_zones + kea_dhcp_msdns_reverse_zones }}"
+  loop_control:
+    loop_var: kea_dhcp_msdns_zone
+  when: >-
+    kea_dhcp_msdns__zones.stdout is not search('pszZoneName\\s*:\\s*'
+      ~ (kea_dhcp_msdns_zone | regex_replace('\\.$', '') | regex_escape) ~ '\\s*$', multiline=True, ignorecase=True)
+  changed_when: true
+  no_log: true
+
+- name: Export, check and fetch the keytab
+  when: kea_dhcp_msdns__make_keytab | bool
+  block:
+    - name: Create a temporary path on the DC
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .keytab
+      register: kea_dhcp_msdns__tmp
+
+    # exportkeytab appends to an existing file; start empty.
+    - name: Remove the empty temp file before export
+      ansible.builtin.file:
+        path: "{{ kea_dhcp_msdns__tmp.path }}"
+        state: absent
+
+    - name: Export the keytab
+      ansible.builtin.command:
+        argv:
+          - samba-tool
+          - domain
+          - exportkeytab
+          - "{{ kea_dhcp_msdns__tmp.path }}"
+          - "--principal={{ kea_dhcp_msdns_client_principal }}"
+      changed_when: true
+
+    - name: Check whether kinit is available
+      ansible.builtin.command:
+        cmd: sh -c 'command -v kinit'
+      register: kea_dhcp_msdns__kinit
+      changed_when: false
+      failed_when: false
+      when: kea_dhcp_msdns_verify_keytab | bool
+
+    # Check against this DC's own KDC with a throwaway krb5.conf: the host's
+    # (Samba writes one that finds KDCs via DNS SRV) may not resolve them.
+    - name: Write a krb5.conf for the keytab check
+      ansible.builtin.copy:
+        dest: "{{ kea_dhcp_msdns__tmp.path }}.krb5.conf"
+        mode: "0600"
+        content: |
+          [libdefaults]
+            default_realm = {{ kea_dhcp_msdns_realm }}
+            dns_lookup_kdc = false
+            rdns = false
+          [realms]
+            {{ kea_dhcp_msdns_realm }} = {
+              kdc = 127.0.0.1
+            }
+      when:
+        - kea_dhcp_msdns_verify_keytab | bool
+        - kea_dhcp_msdns__kinit.rc | default(1) == 0
+
+    - name: Get a ticket with the new keytab
+      ansible.builtin.command:
+        argv: [kinit, -k, -t, "{{ kea_dhcp_msdns__tmp.path }}", "{{ kea_dhcp_msdns_client_principal }}"]
+      environment:
+        KRB5_CONFIG: "{{ kea_dhcp_msdns__tmp.path }}.krb5.conf"
+        KRB5CCNAME: "MEMORY:kea-dhcp-msdns"
+      changed_when: false
+      when:
+        - kea_dhcp_msdns_verify_keytab | bool
+        - kea_dhcp_msdns__kinit.rc | default(1) == 0
+
+    - name: Fetch the keytab to the controller
+      ansible.builtin.fetch:
+        src: "{{ kea_dhcp_msdns__tmp.path }}"
+        dest: "{{ kea_dhcp_msdns_keytab_dest }}"
+        flat: true
+  always:
+    - name: Remove the keytab and check config from the DC
+      ansible.builtin.file:
+        path: "{{ kea_dhcp_msdns__cleanup }}"
+        state: absent
+      loop:
+        - "{{ kea_dhcp_msdns__tmp.path }}"
+        - "{{ kea_dhcp_msdns__tmp.path }}.krb5.conf"
+      loop_control:
+        loop_var: kea_dhcp_msdns__cleanup
+      when: kea_dhcp_msdns__tmp.path is defined
+
+- name: Restrict the fetched keytab on the controller
+  ansible.builtin.file:
+    path: "{{ kea_dhcp_msdns_keytab_dest }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false

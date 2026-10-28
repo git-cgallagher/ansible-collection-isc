@@ -27,7 +27,8 @@ kea_dhcp_version_series: "3.0"
 # Which Kea daemons this host runs.
 kea_dhcp_dhcp4_enabled: true
 kea_dhcp_dhcp6_enabled: false
-kea_dhcp_ddns_enabled: false
+# Enabled automatically when kea_dhcp_dns_integration is anything but none.
+kea_dhcp_ddns_enabled: "{{ kea_dhcp_dns_integration != 'none' }}"
 # Control Agent (2.6 only; deprecated in 3.0, removed in 3.2).
 # auto = enabled on 2.6 when the HTTP API or a non-dedicated-listener HA setup needs it.
 kea_dhcp_ctrl_agent_enabled: auto
@@ -225,6 +226,33 @@ kea_dhcp_ha_defaults:
     http-dedicated-listener: true
     http-listener-threads: 0
     http-client-threads: 0
+
+# -----------------------------------------------------------------------------
+# DNS integration (dynamic DNS updates)
+# -----------------------------------------------------------------------------
+# Which DNS service Kea updates. The role loads vars/dns/<integration>.yml as a
+# preset (DDNS policy for the DHCP daemons, signing method, GSS-TSIG defaults)
+# and merges kea_dhcp_dns over it, so anything you set wins.
+#   none            no DNS updates (default)
+#   ms-dns          Microsoft DNS on AD domain controllers, GSS-TSIG (Kerberos)
+#   bind9-gss-tsig  BIND 9 / FreeIPA with GSS-TSIG (Kerberos)
+#   rfc2136         any RFC 2136 server with a shared TSIG key
+kea_dhcp_dns_integration: none
+# Provider settings (see README "DNS integration"):
+#   domain:          DNS domain, e.g. example.com (forward zone + principals)
+#   servers:         [{name: dc1, ip: 192.0.2.10, port: 53}]  name = DNS host's short name
+#   forward_zones:   default [<domain>.]
+#   reverse_zones:   [] (must already exist on the DNS server)
+#   dhcp_ddns_params: Kea DDNS keys for the DHCP daemons, over the preset's
+#   GSS-TSIG (ms-dns, bind9-gss-tsig):
+#     realm (default: domain upper-cased), client_principal
+#     (default DHCP/kea.<domain>@<REALM>), keytab_src (controller path to the
+#     keytab; vault-encrypted is fine), keytab_path (/etc/kea/kea.keytab),
+#     kdcs (default: servers' IPs), krb5_conf_path (/etc/kea/krb5.conf),
+#     gss: {hook parameter overrides}, install_krb5_tools: false
+#   rfc2136:
+#     tsig_key: {name, secret (base64; use Ansible Vault), algorithm}
+kea_dhcp_dns: {}
 
 # -----------------------------------------------------------------------------
 # Daemon configuration (pass-through)

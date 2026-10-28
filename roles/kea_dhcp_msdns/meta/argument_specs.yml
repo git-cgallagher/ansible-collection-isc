@@ -1,0 +1,78 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare AD / Microsoft DNS (or Samba AD) for Kea GSS-TSIG updates
+    description:
+      - Service account with UPN = client principal, SPN, DnsUpdateProxy, zones, and a keytab fetched to the controller.
+      - 'Pairs with git_cgallagher.isc.kea_dhcp (kea_dhcp_dns_integration: ms-dns).'
+    author:
+      - Chris Gallagher
+    options:
+      kea_dhcp_msdns_backend:
+        type: str
+        description: windows, samba, or auto (Windows targets use windows, others samba).
+        choices:
+          - auto
+          - windows
+          - samba
+      kea_dhcp_msdns_domain:
+        type: str
+        description: AD DNS domain, e.g. corp.example.com. Required.
+      kea_dhcp_msdns_realm:
+        type: str
+        description: Kerberos realm; default the domain upper-cased.
+      kea_dhcp_msdns_service_account:
+        type: str
+        description: sAMAccountName of the account Kea authenticates as.
+      kea_dhcp_msdns_service_account_password:
+        type: str
+        description: Password for the service account (vault). Required.
+        no_log: true
+      kea_dhcp_msdns_service_account_ou:
+        type: str
+        description: 'OU for the account (Windows: DN; Samba: --userou relative DN); empty = Users.'
+      kea_dhcp_msdns_client_principal:
+        type: str
+        description: Kerberos principal Kea uses; also set as the account UPN. Must match kea_dhcp_dns.client_principal.
+      kea_dhcp_msdns_netbios_domain:
+        type: str
+        description: 'Windows: NetBIOS domain for ktpass -mapuser.'
+      kea_dhcp_msdns_dnsupdateproxy:
+        type: bool
+        description: Add the account to DnsUpdateProxy.
+      kea_dhcp_msdns_forward_zones:
+        type: list
+        description: Forward zones Kea updates; created if missing.
+        elements: str
+      kea_dhcp_msdns_reverse_zones:
+        type: list
+        description: Reverse zones Kea updates; created if missing.
+        elements: str
+      kea_dhcp_msdns_dynamic_update:
+        type: str
+        description: Windows zone dynamic update setting.
+        choices:
+          - Secure
+          - NonsecureAndSecure
+      kea_dhcp_msdns_keytab_dest:
+        type: str
+        description: Controller path the keytab is fetched to (mode 0600). Keep it out of repositories. Required.
+      kea_dhcp_msdns_keytab_rotate:
+        type: bool
+        description: 'Produce a new keytab even if keytab_dest exists (Windows: invalidates earlier keytabs).'
+      kea_dhcp_msdns_keytab_crypto:
+        type: str
+        description: Windows ktpass -crypto value.
+      kea_dhcp_msdns_samba_admin_user:
+        type: str
+        description: 'Samba: account for samba-tool DNS RPC calls.'
+      kea_dhcp_msdns_samba_admin_password:
+        type: str
+        description: 'Samba: password for that account (vault).'
+        no_log: true
+      kea_dhcp_msdns_samba_dns_server:
+        type: str
+        description: 'Samba: DNS server samba-tool talks to.'
+      kea_dhcp_msdns_verify_keytab:
+        type: bool
+        description: 'Samba: kinit with the new keytab on the DC before fetching it.'

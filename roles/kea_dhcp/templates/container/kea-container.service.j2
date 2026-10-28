@@ -18,6 +18,9 @@ ExecStart={{ kea_dhcp__runtime }} run --rm --name {{ name }} --network host \
 {% endif %}
   --cap-drop ALL{% for c in kea_dhcp_k8s_capabilities %} --cap-add {{ c }}{% endfor %} \
   -e KEA_PIDFILE_DIR=/tmp \
+{% if d == 'ddns' and kea_dhcp__dns.mode | default('none') == 'gss' %}
+  -e KRB5_CONFIG={{ kea_dhcp__dns.krb5_conf_path }} \
+{% endif %}
 {% for dir in kea_dhcp__container_ro_dirs %}
   -v {{ dir }}:{{ dir }}:ro{{ kea_dhcp_container_volume_options }} \
 {% endfor %}

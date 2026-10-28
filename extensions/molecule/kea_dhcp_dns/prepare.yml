@@ -1,0 +1,142 @@
+---
+# ns1: MIT KDC for EXAMPLE.TEST + BIND 9 accepting GSS-TSIG (DHCP/kea principal)
+# and TSIG (kea-key) updates. No init system: the daemons are started directly.
+- name: Prepare the KDC and BIND
+  hosts: ns1
+  gather_facts: false
+  vars:
+    kea_dns_ephemeral: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+  tasks:
+    - name: Install the KDC, BIND and dig
+      ansible.builtin.raw: >-
+        export DEBIAN_FRONTEND=noninteractive; apt-get update -qq &&
+        apt-get install -y -qq python3 procps krb5-kdc krb5-admin-server bind9 bind9-dnsutils >/dev/null
+      changed_when: true
+
+    - name: Write krb5.conf
+      ansible.builtin.copy:
+        dest: /etc/krb5.conf
+        mode: "0644"
+        content: |
+          [libdefaults]
+            default_realm = EXAMPLE.TEST
+            dns_lookup_kdc = false
+            rdns = false
+          [realms]
+            EXAMPLE.TEST = {
+              kdc = 172.29.50.10
+              admin_server = 172.29.50.10
+            }
+
+    - name: Create the realm, principals and keytabs
+      ansible.builtin.shell:
+        cmd: |
+          set -eo pipefail
+          [ -f /var/lib/krb5kdc/principal ] && exit 0
+          kdb5_util create -s -r EXAMPLE.TEST -P "$(head -c 24 /dev/urandom | base64)" >/dev/null
+          kadmin.local -q "addprinc -randkey DNS/ns1.example.test@EXAMPLE.TEST" >/dev/null
+          kadmin.local -q "addprinc -randkey DHCP/kea.example.test@EXAMPLE.TEST" >/dev/null
+          kadmin.local -q "ktadd -k /etc/bind/dns.keytab DNS/ns1.example.test@EXAMPLE.TEST" >/dev/null
+          kadmin.local -q "ktadd -k /root/kea.keytab DHCP/kea.example.test@EXAMPLE.TEST" >/dev/null
+          chown root:bind /etc/bind/dns.keytab && chmod 0640 /etc/bind/dns.keytab
+          tsig-keygen -a hmac-sha256 kea-key > /etc/bind/kea-key.conf
+          chown root:bind /etc/bind/kea-key.conf && chmod 0640 /etc/bind/kea-key.conf
+          echo created
+        executable: /bin/bash
+      register: kea_dns_realm
+      changed_when: "'created' in kea_dns_realm.stdout"
+
+    - name: Configure BIND zones and update policies
+      ansible.builtin.copy:
+        dest: /etc/bind/named.conf.local
+        mode: "0644"
+        content: |
+          include "/etc/bind/kea-key.conf";
+          zone "example.test" { type primary; file "/var/lib/bind/example.test.db";
+            update-policy { grant "DHCP/kea.example.test@EXAMPLE.TEST" wildcard * ANY; }; };
+          zone "tsig.test" { type primary; file "/var/lib/bind/tsig.test.db";
+            update-policy { grant kea-key wildcard * ANY; }; };
+          zone "50.29.172.in-addr.arpa" { type primary; file "/var/lib/bind/rev.db";
+            update-policy { grant "DHCP/kea.example.test@EXAMPLE.TEST" wildcard * ANY;
+                            grant kea-key wildcard * ANY; }; };
+
+    - name: Configure BIND options
+      ansible.builtin.copy:
+        dest: /etc/bind/named.conf.options
+        mode: "0644"
+        content: |
+          options {
+            directory "/var/cache/bind";
+            listen-on { any; };
+            listen-on-v6 { none; };
+            recursion no;
+            dnssec-validation no;
+            tkey-gssapi-keytab "/etc/bind/dns.keytab";
+          };
+
+    - name: Write the zone files
+      ansible.builtin.copy:
+        dest: "/var/lib/bind/{{ item }}"
+        owner: bind
+        group: bind
+        mode: "0644"
+        force: false
+        content: |
+          $TTL 300
+          @ IN SOA ns1.example.test. hostmaster.example.test. 1 3600 600 86400 300
+          @ IN NS ns1.example.test.
+          {{ 'ns1 IN A 172.29.50.10' if item == 'example.test.db' else '' }}
+      loop: [example.test.db, tsig.test.db, rev.db]
+
+    # Daemons started by a plain command die with its docker exec session, so
+    # run them in the foreground under Ansible's async wrapper.
+    - name: Create BIND's runtime directory
+      ansible.builtin.file:
+        path: /run/named
+        state: directory
+        owner: bind
+        group: bind
+        mode: "0775"
+
+    - name: Start the KDC (foreground, detached by async)
+      ansible.builtin.command:
+        cmd: krb5kdc -n
+      async: 7200
+      poll: 0
+      changed_when: true
+
+    - name: Start BIND (foreground, detached by async)
+      ansible.builtin.command:
+        cmd: named -g -u bind
+      async: 7200
+      poll: 0
+      changed_when: true
+
+    - name: Wait for BIND to answer
+      ansible.builtin.command:
+        cmd: dig +short @127.0.0.1 ns1.example.test A
+      register: kea_dns_ns1
+      until: kea_dns_ns1.stdout == '172.29.50.10'
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    - name: Hand the Kea keytab to the controller (ephemeral dir only)
+      ansible.builtin.fetch:
+        src: /root/kea.keytab
+        dest: "{{ kea_dns_ephemeral }}/kea.keytab"
+        flat: true
+
+    - name: Read the TSIG key file
+      ansible.builtin.slurp:
+        src: /etc/bind/kea-key.conf
+      register: kea_dns_tsig
+      no_log: true
+
+    - name: Hand the TSIG secret to the controller (ephemeral dir only)
+      ansible.builtin.copy:
+        content: "{{ kea_dns_tsig.content | b64decode | regex_search('secret \"([^\"]+)\"', '\\1') | first }}"
+        dest: "{{ kea_dns_ephemeral }}/tsig.secret"
+        mode: "0600"
+      delegate_to: localhost
+      no_log: true

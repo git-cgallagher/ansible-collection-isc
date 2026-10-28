@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.5.0 — 2026-10-28
+
+- **`kea_dhcp`: DNS integrations.** `kea_dhcp_dns_integration: none | ms-dns |
+  bind9-gss-tsig | rfc2136` loads a provider preset (`vars/dns/`) under
+  `kea_dhcp_dns`, which you can override. Anything but `none` enables
+  `kea-dhcp-ddns`. The role generates:
+  - the DDNS daemon's forward and reverse domains from one `servers` list;
+  - TSIG keys for `rfc2136`;
+  - ISC's GSS-TSIG hook for the Kerberos providers (`isc-kea-gss-tsig`, a
+    keytab, and a Kea-only `krb5.conf` passed through `KRB5_CONFIG`, so the
+    host's `/etc/krb5.conf` is untouched), in package, container and
+    Kubernetes mode. In Kubernetes the binary keytab goes into the Secret's
+    `data`.
+  - The DHCP-side policy comes from the preset; `ms-dns` overrides client
+    updates and uses `check-exists-with-dhcid`.
+- **New role `kea_dhcp_msdns`** prepares Active Directory / Microsoft DNS:
+  service account with UPN equal to the client principal, SPN,
+  DnsUpdateProxy, zones, and a keytab fetched to a controller path. Windows
+  (PowerShell + ktpass) and Samba AD backends.
+- New Molecule scenarios, also run in CI:
+  - `kea_dhcp_dns`: signed GSS-TSIG and TSIG updates land in BIND 9 behind
+    an MIT KDC, including a client moving to a new address.
+  - `kea_dhcp_msdns`: the companion role on Samba AD, then Kea's `kinit`
+    and GSS-TSIG key exchange with the DC.
+  - The Windows backend and Microsoft DNS's own GSS-TSIG verifier aren't
+    covered by CI.
+- Render tests cover all three integrations with `kea -t` on Kea 3.0 and 3.2.
+
 ## 1.4.1 — 2026-10-28
 
 Stork on Amazon Linux 2023, including next to Kea in containers.

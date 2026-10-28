@@ -1,0 +1,37 @@
+---
+- name: Converge
+  hosts: kea-gss:kea-tsig
+  gather_facts: false
+  vars:
+    kea_dns_ephemeral: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    kea_dhcp_bootstrap_python: true
+    kea_dhcp_manage_service: false
+    kea_dhcp_version_series: "3.0"
+    kea_dhcp_interfaces: [eth0]
+    # lease4-add / lease4-resend-ddns drive the updates in verify.yml.
+    kea_dhcp_lease_cmds_enabled: true
+    kea_dhcp_dhcp4_settings:
+      subnet4:
+        - id: 1
+          subnet: 172.29.50.0/24
+          pools: [{pool: 172.29.50.100 - 172.29.50.200}]
+    kea_dhcp_dns_integration: "{{ 'bind9-gss-tsig' if inventory_hostname == 'kea-gss' else 'rfc2136' }}"
+    kea_dhcp_dns_gss:
+      domain: example.test
+      realm: EXAMPLE.TEST
+      servers: [{name: ns1, ip: 172.29.50.10}]
+      reverse_zones: [50.29.172.in-addr.arpa]
+      keytab_src: "{{ kea_dns_ephemeral }}/kea.keytab"
+      install_krb5_tools: true
+    kea_dhcp_dns_tsig:
+      domain: tsig.test
+      servers: [{name: ns1, ip: 172.29.50.10}]
+      reverse_zones: [50.29.172.in-addr.arpa]
+      tsig_key:
+        name: kea-key
+        secret: "{{ lookup('ansible.builtin.file', kea_dns_ephemeral ~ '/tsig.secret') }}"
+    kea_dhcp_dns: "{{ kea_dhcp_dns_gss if inventory_hostname == 'kea-gss' else kea_dhcp_dns_tsig }}"
+  tasks:
+    - name: Apply the role from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp

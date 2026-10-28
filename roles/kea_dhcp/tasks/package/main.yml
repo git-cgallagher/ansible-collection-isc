@@ -74,6 +74,16 @@
 - name: Install supporting files
   ansible.builtin.include_tasks: files.yml
 
+- name: Install GSS-TSIG files for the DNS integration
+  ansible.builtin.include_tasks: ../dns/files.yml
+  when: kea_dhcp__dns.mode == 'gss'
+
+- name: Point kea-dhcp-ddns at Kea's krb5.conf
+  ansible.builtin.include_tasks: ../dns/systemd_env.yml
+  when:
+    - kea_dhcp__dns.mode == 'gss'
+    - kea_dhcp__service_manager == 'systemd'
+
 - name: Install configuration
   ansible.builtin.include_tasks: config.yml
 

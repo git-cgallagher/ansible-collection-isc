@@ -21,6 +21,8 @@ roles/stork_*            Stork server, agent, package repository
 docker/                  Stork image Dockerfiles (ISC publishes none)
 examples/kea_dhcp/       ready-to-adapt Kea inventories
 extensions/molecule/kea_dhcp/       Kea package installs on 5 distros (no init: configs validated, services not started)
+extensions/molecule/kea_dhcp_dns/ Kea DDNS end to end: MIT KDC + BIND 9, bind9-gss-tsig and rfc2136
+extensions/molecule/kea_dhcp_msdns/ kea_dhcp_msdns on Samba AD + Kea ms-dns: kinit and GSS-TSIG key exchange
 extensions/molecule/kea_dhcp_container/ Kea container mode: systemd + Docker in the node, Kea 3.0 and 2.6 + ctrl-agent
 extensions/molecule/kea_dhcp_ha3/   Kea 3-node HA (primary + standby + backup): starts Kea, checks states + failover
 extensions/molecule/stork/          Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
@@ -37,6 +39,8 @@ ansible-lint && yamllint .          # production profile, must stay at 0
 tests/kea_dhcp/run.sh               # Kea render + kea -t (Docker; amd64 images)
 molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
 molecule test -s kea_dhcp_ha3       # 3-node HA states + failover
+molecule test -s kea_dhcp_dns       # DDNS: GSS-TSIG + TSIG updates land in BIND
+molecule test -s kea_dhcp_msdns     # AD side (Samba) + Kea Kerberos/TKEY
 molecule test -s kea_dhcp_container # container mode (native-arch nodes; dockerd crashes under QEMU)
 molecule test -s stork
 ```
@@ -125,6 +129,18 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - Molecule scenarios live in `extensions/molecule/<scenario>` (the layout `ansible-creator` scaffolds
   for collections). Molecule detects the collection and finds them there; run them from the repo
   root by name (`molecule test -s kea_dhcp`). `MOLECULE_PROJECT_DIRECTORY` stays the repo root.
+- **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
+  tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
+  commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
+  accessible by integration". Galaxy still gets the version, but the GitHub release is lost (1.3.1,
+  2026-10-28). Wait for the release run to go green before the next merge.
+- **GSS-TSIG / AD (learned 2026-10-28):**
+  - The AD account's **UPN must equal Kea's client principal**: AD only issues TGTs to UPNs. `ktpass -mapuser` does it on Windows; Samba needs `ldbmodify` (`ldb-tools`). The symptom is `GSS_TSIG_NEW_KEY_SETUP_FAILED ... bad client credentials`, and `kinit -k -t <keytab> <principal>` gives a one-line diagnosis.
+  - `client-keytab` alone is enough; no credentials cache is needed.
+  - Samba's internal DNS rejects Kea's signed updates (`gssapi_check_packet ... NT_STATUS_ACCESS_DENIED`), and its response TSIG fails even for `nsupdate -g`. Samba with BIND9_DLZ couldn't decrypt AES-256 tickets (exportkeytab omits AES-256 for the DNS principal). So signed updates are tested against MIT KDC + BIND (`kea_dhcp_dns`), and AD/Kerberos against Samba (`kea_dhcp_msdns`).
+  - Keytabs are binary: in Kubernetes they go through `slurp` into the Secret's `data`, never `stringData` or text lookups.
+  - Presets live in `vars/dns/<integration>.yml` as one internal dict, `kea_dhcp__dns_preset`, so it never outranks `kea_dhcp_dns`.
+- Test nodes: `debian:12` has no `pgrep` (install `procps`); AL2023 has no `setsid` (use Ansible async); `dig` segfaults under QEMU (query from a native node).
 - Container mode validates configs with `<runtime> run --network host`: `kea -t` checks that the
   configured interfaces exist, so `--network none` fails ("interface 'eth0' doesn't exist").
 - Never wrap a Jinja `{% for %}` that emits text across lines inside a YAML folded scalar (`>-`):
@@ -135,7 +151,7 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   `kea_dhcp_container` node is built from its Dockerfile for the host's own architecture, and the
   amd64 Kea images run inside it through binfmt (`kea_dhcp_container_platform: linux/amd64`).
 - **Amazon Linux 2023 on x86-64 is the owner's primary platform (2026-10-28).** Test it first and keep its
-  Molecule jobs (`kea-al2023`, `kea-al2023-min`, `kea_dhcp_ha3`, `kea_dhcp_container`) required in
+  Molecule jobs (`kea-al2023`, `kea-al2023-min`, `kea_dhcp_ha3`, `kea_dhcp_container`, and from 1.5.0 `kea_dhcp_dns`, `kea_dhcp_msdns`) required in
   the `main protection` ruleset. EL packages name the Kea user `kea` (Debian: `_kea`).
 - Amazon Linux 2023: ISC's `amzn/2023` repos exist but are EMPTY (168-byte primary index), and AL2023
   ships no kea/log4cplus. The role maps AL2023 to ISC's `el/9` repo plus an EPEL 9 repo restricted to
@@ -221,6 +237,7 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## TODO / follow-ups
 
+- Run `kea_dhcp_msdns`'s Windows backend and an `ms-dns` update against a real Windows DC (Microsoft DNS's GSS-TSIG verifier is untested here).
 - Automate the Stork sidecar live test, which was done by hand in 1.4.0 (see
   `docs/testing.md`). It needs a k3s or kind job with amd64 Kea images, so an
   amd64 CI runner.

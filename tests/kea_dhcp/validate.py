@@ -7,6 +7,7 @@ in the container image the role chose. Needs docker and PyYAML.
 
 usage: python3 tests/kea_dhcp/validate.py [tests/kea_dhcp/output]
 """
+import base64
 import pathlib
 import subprocess
 import sys
@@ -30,7 +31,10 @@ for manifest in sorted(out.rglob("*.yaml")):
                 if m["name"] != "config":
                     continue
                 src = pathlib.Path(tmp) / m["subPath"]  # subPaths are unique per pod
-                src.write_text(secret["stringData"][m["subPath"]])
+                if m["subPath"] in secret.get("data", {}):  # binary (keytab): base64
+                    src.write_bytes(base64.b64decode(secret["data"][m["subPath"]]))
+                else:
+                    src.write_text(secret["stringData"][m["subPath"]])
                 args += ["-v", f"{src}:{m['mountPath']}:ro"]
             binary, conf = ctr["command"][0], ctr["command"][2]
             cmd = ["docker", "run", "--rm", "--platform", "linux/amd64", *args,

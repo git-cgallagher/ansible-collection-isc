@@ -1,0 +1,23 @@
+---
+# GSS-TSIG files on the host (package and container modes). The keytab is
+# copied from the controller as-is (binary-safe; Ansible decrypts a
+# vault-encrypted file on the way) and is readable only by root and Kea's group.
+
+- name: Install the Kea keytab
+  ansible.builtin.copy:
+    src: "{{ kea_dhcp__dns.keytab_src }}"
+    dest: "{{ kea_dhcp__dns.keytab_path }}"
+    owner: root
+    group: "{{ kea_dhcp__group }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart Kea ddns
+
+- name: Write Kea's Kerberos configuration
+  ansible.builtin.template:
+    src: dns/krb5.conf.j2
+    dest: "{{ kea_dhcp__dns.krb5_conf_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Kea ddns
