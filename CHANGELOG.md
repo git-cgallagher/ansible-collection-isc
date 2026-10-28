@@ -10,7 +10,8 @@
   `stork_agent_port: abc` or `stork_server_deploy_mode: helm`. Passwords and
   tokens are `no_log`.
 - New workflow **`argument-specs`** (`tests/argument_specs/run.sh`, on
-  ansible-core 2.18 and 2.21), covering every role, `kea_dhcp` included. It
+  ansible-core 2.18 and 2.21), covering every role, `kea_dhcp` and
+  `kea_dhcp_msdns` included. It
   fails when:
   - a default has no spec option, or a spec option has no default;
   - a literal default doesn't match its declared type, list elements or

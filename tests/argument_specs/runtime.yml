@@ -23,3 +23,7 @@
     - name: Reject a non-dict stork_repository key map
       ansible.builtin.include_tasks: runtime_case.yml
       vars: { argspec_role: stork_repository, stork_repository_apk_keys: not-a-dict }
+
+    - name: Reject a bad kea_dhcp_msdns backend
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: kea_dhcp_msdns, kea_dhcp_msdns_backend: bogus }
