@@ -16,6 +16,8 @@
     script: |
       param($Account, $Password, $Upn, $Spn, $Ou, [bool]$UpdateProxy)
       $ErrorActionPreference = 'Stop'
+      # win_powershell reports changed unless the script says otherwise.
+      $Ansible.Changed = $false
       Import-Module ActiveDirectory
       $user = Get-ADUser -Filter "SamAccountName -eq '$Account'" -Properties servicePrincipalName, userPrincipalName
       if (-not $user) {
@@ -63,6 +65,8 @@
     script: |
       param([string[]]$Zones, $DynamicUpdate)
       $ErrorActionPreference = 'Stop'
+      # win_powershell reports changed unless the script says otherwise.
+      $Ansible.Changed = $false
       Import-Module DnsServer
       foreach ($name in $Zones) {
           $name = $name.TrimEnd('.')
