@@ -114,6 +114,8 @@
 
 # Validate inside the image that will run it: the candidate file is mounted
 # over a scratch path, with the same read-only directories as at runtime.
+# Host networking because `kea -t` checks that configured interfaces exist
+# (it only parses; it never binds sockets).
 - name: Write Kea configuration files
   ansible.builtin.template:
     src: kea.conf.j2
@@ -122,7 +124,7 @@
     group: root
     mode: "0640"
     validate: >-
-      {{ (kea_dhcp__runtime ~ ' run --rm --network none ' ~ (kea_dhcp__platform_args | join(' '))
+      {{ (kea_dhcp__runtime ~ ' run --rm --network host ' ~ (kea_dhcp__platform_args | join(' '))
           ~ ' -v %s:/tmp/kea-candidate.conf:ro'
           ~ kea_dhcp__ro_mount_args
           ~ ' ' ~ kea_dhcp_k8s_images[kea_dhcp__daemon]
