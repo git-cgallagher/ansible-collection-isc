@@ -1,0 +1,62 @@
+---
+# Container mode (kea_dhcp_deployment: container): each test node runs systemd
+# and its own Docker engine, and the role runs Kea's ISC images there under
+# systemd units. Nodes use the host's native architecture; the amd64 Kea
+# images run through emulation where needed (kea_dhcp_container_platform).
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: kea-ct30
+    image: kea-container-node
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: true
+    cgroupns_mode: host
+    command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /var/lib/docker
+    tmpfs:
+      - /run
+      - /tmp
+  - name: kea-ct26
+    image: kea-container-node
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: true
+    cgroupns_mode: host
+    command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /var/lib/docker
+    tmpfs:
+      - /run
+      - /tmp
+provisioner:
+  name: ansible
+  env:
+    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections
+  inventory:
+    host_vars:
+      kea-ct30:
+        kea_dhcp_version_series: "3.0"
+      kea-ct26:
+        # 2.6: the control agent shares /var/run/kea with kea-dhcp4.
+        kea_dhcp_version_series: "2.6"
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy

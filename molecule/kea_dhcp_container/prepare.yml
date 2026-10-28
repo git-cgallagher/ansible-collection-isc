@@ -1,0 +1,13 @@
+---
+- name: Prepare
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Wait for the node's Docker engine
+      ansible.builtin.command:
+        cmd: docker info --format '{{ "{{" }}.ServerVersion{{ "}}" }}'
+      register: kea_ct_docker
+      until: kea_ct_docker.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false

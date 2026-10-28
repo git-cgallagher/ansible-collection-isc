@@ -1,0 +1,36 @@
+# {{ ansible_managed }}
+{% set d = kea_dhcp__daemon %}
+{% set name = kea_dhcp__services[d] | regex_replace('-container$', '') %}
+[Unit]
+Description=ISC Kea {{ d | replace('_', ' ') }} (container)
+Wants=network-online.target
+After=network-online.target{{ ' kea-dhcp4-container.service' if d == 'ctrl_agent' and 'dhcp4' in kea_dhcp__daemons else '' }}
+
+[Service]
+Restart=on-failure
+RestartSec=5
+ExecStartPre=-{{ kea_dhcp__runtime }} rm -f {{ name }}
+# Host networking for raw DHCP sockets and HA. KEA_PIDFILE_DIR keeps the PID
+# file out of the shared socket dir, where a stale one blocks restarts.
+ExecStart={{ kea_dhcp__runtime }} run --rm --name {{ name }} --network host \
+{% if kea_dhcp__platform_args %}
+  {{ kea_dhcp__platform_args | join(' ') }} \
+{% endif %}
+  --cap-drop ALL{% for c in kea_dhcp_k8s_capabilities %} --cap-add {{ c }}{% endfor %} \
+  -e KEA_PIDFILE_DIR=/tmp \
+{% for dir in kea_dhcp__container_ro_dirs %}
+  -v {{ dir }}:{{ dir }}:ro{{ kea_dhcp_container_volume_options }} \
+{% endfor %}
+  -v {{ kea_dhcp_data_dir }}:/var/lib/kea{{ kea_dhcp_container_volume_options }} \
+{% if kea_dhcp__ctrl_agent | bool %}
+  -v {{ kea_dhcp_container_run_dir }}:/var/run/kea{{ kea_dhcp_container_volume_options }} \
+{% endif %}
+{% for arg in kea_dhcp_container_extra_args %}
+  {{ arg }} \
+{% endfor %}
+  {{ kea_dhcp_k8s_images[d] }} \
+  /usr/sbin/{{ kea_dhcp__binaries[d] }} -c {{ kea_dhcp_config_dir }}/{{ kea_dhcp__config_files[d] }}
+ExecStop={{ kea_dhcp__runtime }} stop -t 10 {{ name }}
+
+[Install]
+WantedBy=multi-user.target

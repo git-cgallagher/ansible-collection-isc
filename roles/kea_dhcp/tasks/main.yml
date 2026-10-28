@@ -4,14 +4,14 @@
 - name: Bootstrap Python on minimal hosts
   ansible.builtin.include_tasks: package/bootstrap.yml
   when:
-    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_deployment in ['package', 'container']
     - kea_dhcp_bootstrap_python | bool
 
 - name: Gather minimal facts when the play skipped them
   ansible.builtin.setup:
     gather_subset: [min]
   when:
-    - kea_dhcp_deployment == 'package'
+    - kea_dhcp_deployment in ['package', 'container']
     - ansible_facts['os_family'] is not defined
 
 - name: Validate cross-variable constraints
@@ -20,6 +20,10 @@
 - name: Deploy from OS packages
   ansible.builtin.include_tasks: package/main.yml
   when: kea_dhcp_deployment == 'package'
+
+- name: Deploy as containers on this host
+  ansible.builtin.include_tasks: container/main.yml
+  when: kea_dhcp_deployment == 'container'
 
 - name: Deploy to Kubernetes
   ansible.builtin.include_tasks: kubernetes/main.yml

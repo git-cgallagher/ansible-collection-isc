@@ -12,6 +12,8 @@
 # Deployment target
 # -----------------------------------------------------------------------------
 # package    — install Kea from OS packages on the inventory host (systemd/OpenRC)
+# container  — run ISC's Kea images on the inventory host with Podman or Docker,
+#              one systemd unit per daemon, host networking (any distro with systemd)
 # kubernetes — render Kea configs into Secrets and apply Deployments/DaemonSets to
 #              a cluster from the controller (Talos, EKS or any conformant cluster)
 kea_dhcp_deployment: package
@@ -249,6 +251,25 @@ kea_dhcp_log_severity: INFO
 kea_dhcp_log_debuglevel: 0
 # Full override of the loggers list for every daemon (empty = computed).
 kea_dhcp_loggers: []
+
+# -----------------------------------------------------------------------------
+# Containers on the host (kea_dhcp_deployment: container)
+# -----------------------------------------------------------------------------
+# Images, image tag and capabilities are shared with Kubernetes mode
+# (kea_dhcp_k8s_images, kea_dhcp_k8s_image_tag, kea_dhcp_k8s_capabilities).
+# auto = podman if installed, else docker. The role doesn't install a runtime.
+kea_dhcp_container_runtime: auto
+# Pull images on every run; the task reports a change only when the image ID moves.
+kea_dhcp_container_pull: true
+# Force an image platform, e.g. linux/amd64 on arm64 hosts with emulation.
+# ISC's images are amd64-only; empty = the runtime's default.
+kea_dhcp_container_platform: ""
+# Host directory shared as /var/run/kea between Kea and the 2.6 control agent.
+kea_dhcp_container_run_dir: /run/kea-container
+# Extra bind-mount options, e.g. ",z" for SELinux relabelling with Podman on EL.
+kea_dhcp_container_volume_options: ""
+# Extra `run` arguments for every Kea container (e.g. ["--memory", "512m"]).
+kea_dhcp_container_extra_args: []
 
 # -----------------------------------------------------------------------------
 # Kubernetes (kea_dhcp_deployment: kubernetes)

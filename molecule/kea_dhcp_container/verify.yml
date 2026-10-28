@@ -1,0 +1,56 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  vars:
+    # status-get through Kea's HTTP API: on 3.x kea-dhcp4 serves it; on 2.6 the
+    # control agent forwards over the shared unix socket.
+    kea_ct_status_script: |
+      import base64, json, sys, urllib.request
+      body = {"command": "status-get"}
+      if sys.argv[1] == "2.6":
+          body["service"] = ["dhcp4"]
+      req = urllib.request.Request("http://127.0.0.1:8000/", json.dumps(body).encode(),
+                                   {"Content-Type": "application/json",
+                                    "Authorization": "Basic " + base64.b64encode(b"admin:molecule-only").decode()})
+      reply = json.loads(urllib.request.urlopen(req, timeout=5).read())
+      reply = reply[0] if isinstance(reply, list) else reply
+      print(reply["result"])
+  tasks:
+    - name: Install the API probe
+      ansible.builtin.copy:
+        content: "{{ kea_ct_status_script }}"
+        dest: /usr/local/lib/kea-status.py
+        mode: "0644"
+
+    - name: Read the Kea units' state
+      ansible.builtin.service_facts:
+
+    - name: Units are active
+      ansible.builtin.assert:
+        that: ansible_facts.services[item ~ '.service'].state == 'running'
+        quiet: true
+      loop: "{{ ['kea-dhcp4-container'] + (['kea-ctrl-agent-container'] if kea_dhcp_version_series == '2.6' else []) }}"
+
+    - name: Kea answers status-get over its API
+      ansible.builtin.command:
+        cmd: "python3 /usr/local/lib/kea-status.py {{ kea_dhcp_version_series }}"
+      register: kea_ct_status
+      until: kea_ct_status.stdout == '0'
+      retries: 20
+      delay: 3
+      changed_when: false
+
+    - name: Restart the Kea unit
+      ansible.builtin.systemd_service:
+        name: kea-dhcp4-container
+        state: restarted
+
+    - name: Kea answers again after a restart
+      ansible.builtin.command:
+        cmd: "python3 /usr/local/lib/kea-status.py {{ kea_dhcp_version_series }}"
+      register: kea_ct_status_after
+      until: kea_ct_status_after.stdout == '0'
+      retries: 20
+      delay: 3
+      changed_when: false

@@ -1,0 +1,157 @@
+---
+# Kea from ISC's images on this host: one systemd unit per daemon running
+# `<runtime> run --network host`. Configs are rendered and validated on the
+# host, then bind-mounted at the same paths so every path in them still holds.
+
+- name: Assert the host can run Kea containers
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['service_mgr'] | default('') == 'systemd'
+      - >-
+        kea_dhcp_k8s_image_registry != 'docker.cloudsmith.io/isc/docker'
+        or ansible_facts['architecture'] in ['x86_64', 'amd64']
+        or kea_dhcp_container_platform | length > 0
+    fail_msg: >-
+      Container mode needs systemd, and ISC's Kea images are linux/amd64 only:
+      on {{ ansible_facts['architecture'] }} build your own images
+      (kea_dhcp_k8s_images) or set kea_dhcp_container_platform: linux/amd64
+      with emulation installed.
+    quiet: true
+
+- name: Detect the container runtime
+  ansible.builtin.shell:
+    cmd: |
+      for r in {{ (['podman', 'docker'] if kea_dhcp_container_runtime == 'auto' else [kea_dhcp_container_runtime]) | join(' ') }}; do
+        if command -v "$r" >/dev/null 2>&1; then command -v "$r"; exit 0; fi
+      done
+      exit 1
+    executable: /bin/sh
+  register: kea_dhcp__runtime_probe
+  changed_when: false
+  failed_when: kea_dhcp__runtime_probe.rc not in [0, 1]
+  check_mode: false
+
+- name: Require a container runtime
+  ansible.builtin.assert:
+    that: kea_dhcp__runtime_probe.rc == 0
+    fail_msg: >-
+      No container runtime ({{ kea_dhcp_container_runtime }}) on {{ inventory_hostname }}.
+      Install podman or docker first (Amazon Linux 2023: `dnf install docker`).
+    quiet: true
+
+- name: Set container-mode facts
+  vars:
+    kea_dhcp__ro_dirs_now: >-
+      {{ ([kea_dhcp_config_dir, kea_dhcp_api_auth_dir] + (kea_dhcp_files | map(attribute='dest') | map('dirname') | list))
+         | unique | reject('match', '^' ~ (kea_dhcp_config_dir | regex_escape) ~ '/') | list }}
+  ansible.builtin.set_fact:
+    kea_dhcp__runtime: "{{ kea_dhcp__runtime_probe.stdout | trim }}"
+    kea_dhcp__user: root
+    kea_dhcp__group: root
+    kea_dhcp__hooks_dir_effective: "{{ kea_dhcp_hooks_dir if kea_dhcp_hooks_dir | length > 0 else kea_dhcp__k8s_hooks_dir }}"
+    kea_dhcp__ha_bind_address: "{{ kea_dhcp_ha_address }}"
+    kea_dhcp__ha_advertise_address: "{{ kea_dhcp_ha_address }}"
+    kea_dhcp__service_manager: systemd
+    # kea-dhcp4-container, kea-ctrl-agent-container, ...
+    kea_dhcp__services: >-
+      {{ dict(kea_dhcp__daemons | zip(kea_dhcp__daemons | map('replace', '_', '-')
+         | map('regex_replace', '^', 'kea-') | map('regex_replace', '$', '-container'))) }}
+    kea_dhcp__platform_args: "{{ ['--platform', kea_dhcp_container_platform] if kea_dhcp_container_platform | length > 0 else [] }}"
+    # Directories bind-mounted read-only at the same path: the config dir plus
+    # any directory holding kea_dhcp_files or API credentials outside it.
+    # Directories bind-mounted read-only at the same path: the config dir plus
+    # any directory holding kea_dhcp_files or API credentials outside it.
+    kea_dhcp__container_ro_dirs: "{{ kea_dhcp__ro_dirs_now }}"
+    # " -v DIR:DIR:ro<opts>" for each read-only dir (pairs joined with ':', so
+    # no regex backreferences and no multi-line Jinja that YAML could split).
+    kea_dhcp__ro_mount_args: >-
+      {{ kea_dhcp__ro_dirs_now | zip(kea_dhcp__ro_dirs_now) | map('join', ':')
+         | map('regex_replace', '^', ' -v ') | map('regex_replace', '$', ':ro' ~ kea_dhcp_container_volume_options) | join('') }}
+
+# Changed only when the image ID moves: podman prints "Writing manifest" even
+# for an up-to-date image.
+- name: Pull the Kea images
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      before=$("$RT" image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG" 2>/dev/null || true)
+      "$RT" pull -q $PLATFORM "$IMG" >/dev/null
+      after=$("$RT" image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$IMG")
+      [ "$before" = "$after" ] && echo unchanged || echo updated
+    executable: /bin/sh
+  environment:
+    RT: "{{ kea_dhcp__runtime }}"
+    IMG: "{{ kea_dhcp_k8s_images[kea_dhcp__daemon] }}"
+    PLATFORM: "{{ kea_dhcp__platform_args | join(' ') }}"
+  loop: "{{ kea_dhcp__daemons }}"
+  loop_control:
+    loop_var: kea_dhcp__daemon
+  register: kea_dhcp__pull
+  when: kea_dhcp_container_pull | bool
+  changed_when: "'updated' in kea_dhcp__pull.stdout"
+  notify: "Restart Kea {{ kea_dhcp__daemon }}"
+
+- name: Create host directories for Kea
+  ansible.builtin.file:
+    path: "{{ kea_dhcp__dir.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ kea_dhcp__dir.mode }}"
+  loop:
+    - {path: "{{ kea_dhcp_config_dir }}", mode: "0750"}
+    - {path: "{{ kea_dhcp_data_dir }}", mode: "0750"}
+    - {path: "{{ kea_dhcp_container_run_dir }}", mode: "0750"}
+  loop_control:
+    loop_var: kea_dhcp__dir
+    label: "{{ kea_dhcp__dir.path }}"
+
+- name: Build configuration
+  ansible.builtin.include_tasks: ../config/build.yml
+
+- name: Install supporting files
+  ansible.builtin.include_tasks: ../package/files.yml
+
+# Validate inside the image that will run it: the candidate file is mounted
+# over a scratch path, with the same read-only directories as at runtime.
+# Host networking because `kea -t` checks that configured interfaces exist
+# (it only parses; it never binds sockets).
+- name: Write Kea configuration files
+  ansible.builtin.template:
+    src: kea.conf.j2
+    dest: "{{ kea_dhcp_config_dir }}/{{ kea_dhcp__config_files[kea_dhcp__daemon] }}"
+    owner: root
+    group: root
+    mode: "0640"
+    validate: >-
+      {{ (kea_dhcp__runtime ~ ' run --rm --network host ' ~ (kea_dhcp__platform_args | join(' '))
+          ~ ' -v %s:/tmp/kea-candidate.conf:ro'
+          ~ kea_dhcp__ro_mount_args
+          ~ ' ' ~ kea_dhcp_k8s_images[kea_dhcp__daemon]
+          ~ ' /usr/sbin/' ~ kea_dhcp__binaries[kea_dhcp__daemon] ~ ' -t /tmp/kea-candidate.conf')
+         if kea_dhcp_validate_config | bool else omit }}
+  loop: "{{ kea_dhcp__daemons }}"
+  loop_control:
+    loop_var: kea_dhcp__daemon
+  notify: "Restart Kea {{ kea_dhcp__daemon }}"
+
+- name: Install the systemd units
+  ansible.builtin.template:
+    src: container/kea-container.service.j2
+    dest: "/etc/systemd/system/{{ kea_dhcp__services[kea_dhcp__daemon] }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ kea_dhcp__daemons }}"
+  loop_control:
+    loop_var: kea_dhcp__daemon
+  notify:
+    - Reload systemd for Kea container units
+    - "Restart Kea {{ kea_dhcp__daemon }}"
+
+- name: Apply unit and config changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Manage services
+  ansible.builtin.include_tasks: ../package/service.yml
+  when: kea_dhcp_manage_service | bool
