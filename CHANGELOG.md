@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.6.0 — 2026-10-28
+
+- **`stork_server`, `stork_agent`, `stork_repository`**: new
+  `meta/argument_specs.yml`. ansible-core now validates their variables when
+  the role starts, as it already did for `kea_dhcp`, and `ansible-doc -t role`
+  documents them. A value of the wrong type or outside its choices now fails
+  at the start of the run instead of partway through, for example
+  `stork_agent_port: abc` or `stork_server_deploy_mode: helm`. Passwords and
+  tokens are `no_log`.
+- New workflow **`argument-specs`** (`tests/argument_specs/run.sh`, on
+  ansible-core 2.18 and 2.21), covering every role, `kea_dhcp` included. It
+  fails when:
+  - a default has no spec option, or a spec option has no default;
+  - a literal default doesn't match its declared type, list elements or
+    choices;
+  - a password, token or secret option isn't `no_log`;
+  - `ansible-doc` can't load the role;
+  - the role accepts a bad value at runtime.
 ## 1.5.0 — 2026-10-28
 
 - **`kea_dhcp`: DNS integrations.** `kea_dhcp_dns_integration: none | ms-dns |
