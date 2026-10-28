@@ -30,16 +30,33 @@
       kea1: hot-standby
       kea2: hot-standby
       kea3: backup
+    # Kept inline (not a .py file) so ansible-test sanity doesn't treat it as
+    # collection code. Prints this server's HA state via ha-heartbeat.
+    kea_ha3_state_script: |
+      import json
+      import socket
+      sock = socket.socket(socket.AF_UNIX)
+      sock.connect("/var/run/kea/kea4-ctrl-socket")
+      sock.sendall(json.dumps({"command": "ha-heartbeat"}).encode())
+      data = b""
+      while True:
+          chunk = sock.recv(65536)
+          if not chunk:
+              break
+          data += chunk
+      reply = json.loads(data)
+      reply = reply[0] if isinstance(reply, list) else reply
+      print(reply.get("arguments", {}).get("state") or "error %s: %s" % (reply.get("result"), reply.get("text")))
   tasks:
     - name: Install the HA state helper
       ansible.builtin.copy:
-        src: kea-ha-state.py
-        dest: /usr/local/bin/kea-ha-state
-        mode: "0755"
+        content: "{{ kea_ha3_state_script }}"
+        dest: /usr/local/lib/kea-ha-state.py
+        mode: "0644"
 
     - name: Wait for the expected steady-state HA state
       ansible.builtin.command:
-        cmd: /usr/local/bin/kea-ha-state
+        cmd: python3 /usr/local/lib/kea-ha-state.py
       register: kea_ha3_state
       until: kea_ha3_state.stdout == kea_ha3_expected[inventory_hostname]
       retries: 40
@@ -56,7 +73,7 @@
 
     - name: Standby takes over as partner-down
       ansible.builtin.command:
-        cmd: /usr/local/bin/kea-ha-state
+        cmd: python3 /usr/local/lib/kea-ha-state.py
       register: kea_ha3_failover
       until: kea_ha3_failover.stdout == 'partner-down'
       retries: 30
@@ -67,7 +84,7 @@
 
     - name: Backup stays passive
       ansible.builtin.command:
-        cmd: /usr/local/bin/kea-ha-state
+        cmd: python3 /usr/local/lib/kea-ha-state.py
       register: kea_ha3_backup
       changed_when: false
       failed_when: kea_ha3_backup.stdout != 'backup'
