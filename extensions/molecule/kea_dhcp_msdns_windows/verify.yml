@@ -30,7 +30,7 @@
           - kea_win_ad.output[0].update_proxy
           - kea_win_ad.output[0].forward == 'Secure'
           - kea_win_ad.output[0].reverse == 'Secure'
-        fail_msg: "{{ kea_win_ad.output[0] }}"
+        fail_msg: "AD and zone state: {{ kea_win_ad.output[0] | to_json }}"
         quiet: true
 
 - name: Kea authenticates to the DC and sends GSS-TSIG signed updates
