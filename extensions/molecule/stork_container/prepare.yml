@@ -1,0 +1,28 @@
+---
+- name: Prepare the Kea node
+  hosts: kea
+  gather_facts: false
+  tasks:
+    - name: Wait for the node's Docker engine
+      ansible.builtin.command:
+        cmd: docker info --format '{{ "{{" }}.ServerVersion{{ "}}" }}'
+      register: stork_ct_docker
+      until: stork_ct_docker.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    - name: Copy the agent Dockerfile
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/docker/Dockerfile.stork-agent"
+        dest: /root/Dockerfile.stork-agent
+        mode: "0644"
+
+    # Native arch; the bundled Kea binaries match the Kea image (3.0.4).
+    - name: Build the Stork agent image
+      ansible.builtin.command:
+        cmd: >-
+          docker build -q -t localhost/stork-agent:molecule
+          --build-arg STORK_VERSION=2.6.0 --build-arg KEA_VERSION=3.0.4
+          -f /root/Dockerfile.stork-agent /root
+      changed_when: true

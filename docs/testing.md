@@ -5,6 +5,7 @@
 | Kea render | `tests/kea_dhcp/run.sh`: 8 deployment shapes (14 instances) rendered without a cluster, every config checked with `kea-<daemon> -t` in the ISC 2.6.5 / 3.0.4 / 3.2.1 images | ✅ see CI |
 | Kea packages | `molecule test -s kea_dhcp`: Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and 3.22 (distro); install, idempotence, config re-validation | ✅ see CI (services aren't started: no init in those containers) |
 | Stork | `molecule test -s stork`: server on Ubuntu 24.04; agents next to Kea 3.0.4 on AL2023 (no API auth) and Kea 3.2.1 on Debian 12 (basic auth via `user-file`/`password-file`) | ✅ both daemons active + monitored, unattended registration, rotated admin password |
+| Stork on AL2023, Kea in containers | `molecule test -s stork_container`: server from packages + PostgreSQL 16 on Amazon Linux 2023; `kea_dhcp` container mode (Kea 3.0.4, basic auth) and `stork_agent` container mode on an AL2023 node with its own Docker engine | ✅ the agent registered unattended, the daemon is active + monitored, units running, idempotent |
 | Kubernetes | Stork server manifests and the generated sidecar spec checked with `kubectl apply --dry-run=server` (k3s 1.33). The Kea Kubernetes path was proven live on kind before the merge (see the Kea role README). | ✅ |
 | Stork sidecar, live (2026-10-28, by hand) | k3s 1.33 in Docker. `stork_server` in Kubernetes mode against an in-cluster PostgreSQL, with the admin password rotated through a port-forward. Then `stork_agent` (Kubernetes mode) plus `kea_dhcp`: a hot-standby pair in service network mode, with API basic auth for `ha` and `stork`. Stork 2.6.0, Kea 3.0.4. Also tested: a pod deleted, and an agent re-registered with fresh state at the same address. | ✅ both daemons active + monitored, subnet found on both, HA hot-standby with both peers in touch. Fixes from this run are in CHANGELOG 1.4.0; [stork-kubernetes.md](stork-kubernetes.md) lists the behaviour seen. |
 | Lint | `ansible-lint` (production), `yamllint` | ✅ |
@@ -15,9 +16,9 @@ fixture. The real Kea role is tested by its own scenario.
 
 ## Not covered yet
 
-- Container mode end to end. Nested podman can't exec on the development
-  machine (Docker Desktop). An earlier revision exercised the same unit
-  through a podman shim and replayed the exact command lines on real Docker.
+- The agent's container mode under podman. `stork_container` uses Docker,
+  the only runtime Amazon Linux 2023 has. Nested podman can't exec on the
+  development machine (Docker Desktop).
 - The Stork sidecar in CI. The live test above was run by hand. It needs
   amd64 emulation on arm64 (ISC's Kea images are amd64-only), so it runs
   slowly on a Mac.

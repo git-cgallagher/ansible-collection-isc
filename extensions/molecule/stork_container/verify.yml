@@ -1,0 +1,59 @@
+---
+- name: Verify Stork monitors the containerized Kea
+  hosts: stork_server
+  gather_facts: false
+  tasks:
+    - name: The bootstrap admin/admin login is refused
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/api/sessions
+        method: POST
+        body_format: json
+        body: { authenticationMethodId: internal, identifier: admin, secret: admin }
+        status_code: [400, 401, 403]
+
+    - name: Log in with the rotated password
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/api/sessions
+        method: POST
+        body_format: json
+        body: { authenticationMethodId: internal, identifier: admin, secret: "{{ test_admin_password }}" }
+      register: stork_ct_login
+
+    - name: The agent's machine is authorized (unattended registration)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/api/machines?authorized=true
+        headers: { Cookie: "{{ stork_ct_login.cookies_string }}" }
+      register: stork_ct_machines
+      until: stork_ct_machines.json.total | default(0) == 1
+      retries: 20
+      delay: 3
+
+    # Active = the agent identified the daemon (with its bundled Kea binary)
+    # and reached its API with the basic-auth client it read from Kea's config.
+    - name: The containerized DHCPv4 daemon is active and monitored
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/api/daemons
+        headers: { Cookie: "{{ stork_ct_login.cookies_string }}" }
+      register: stork_ct_daemons
+      until: >-
+        stork_ct_daemons.json['items'] | default([]) | selectattr('name', 'eq', 'dhcp4')
+        | selectattr('active') | selectattr('monitored') | list | length == 1
+      retries: 30
+      delay: 4
+
+    - name: Show the daemon
+      ansible.builtin.debug:
+        msg: "{{ stork_ct_daemons.json['items'] | map(attribute='label') | zip(stork_ct_daemons.json['items'] | map(attribute='version')) | list }}"
+
+- name: Verify the units on the Kea node
+  hosts: kea
+  gather_facts: false
+  tasks:
+    - name: Read unit state
+      ansible.builtin.service_facts:
+
+    - name: Kea and the agent run under systemd
+      ansible.builtin.assert:
+        that: ansible_facts.services[item].state == 'running'
+        quiet: true
+      loop: [kea-dhcp4-container.service, isc-stork-agent.service]

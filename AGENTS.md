@@ -164,6 +164,14 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ### Stork roles
 
+- **RPM PostgreSQL: allow `::1` as well as `127.0.0.1`.** The server's Go
+  resolver dials `localhost` as `::1` when `/etc/hosts` has that entry, and
+  the stock `pg_hba.conf` answers `::1` with `ident`. Only `127.0.0.1` was
+  allowed until 1.4.1, so the server never started on RHEL, Rocky or AL2023.
+  The Molecule server ran on Ubuntu and hid it; `stork_container` puts it on
+  AL2023.
+- **Amazon Linux 2023 has no podman**, only Docker (`dnf install docker`).
+  Neither role installs a runtime. `runtime: auto` picks Docker there.
 - **The agent runs next to Kea and identifies it by running `kea-dhcp4 -v`
   from its own filesystem.** In container and Kubernetes modes its image must
   bundle Kea's binaries; `docker/Dockerfile.stork-agent` does, with file caps
@@ -218,7 +226,8 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - Test the sidecar with Kea in host network mode and with Kea 3.2.
 - Stable agent address for service mode **without** HA: there is no per-peer
   Service to reuse.
-- Run the Stork agent's container mode end to end on a real VM. Nested podman
+- Run the Stork agent's container mode under podman (`stork_container` covers
+  Docker on AL2023). Nested podman
   can't exec on the dev Mac.
 - Publish the Stork images (GHCR) so container and Kubernetes users don't have
   to build them.

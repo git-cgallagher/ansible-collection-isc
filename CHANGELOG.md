@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.4.1 — 2026-10-28
+
+Stork on Amazon Linux 2023, including next to Kea in containers.
+
+- **`stork_server`**: fixed the local PostgreSQL on RPM hosts (RHEL, Rocky,
+  Amazon Linux 2023). The server never started: "Ident authentication failed
+  for user stork". It dials `localhost` as `::1` when `/etc/hosts` lists it,
+  and the role had only allowed password auth on `127.0.0.1`. Both loopback
+  addresses are allowed now. CI hadn't caught it because the Molecule server
+  ran on Ubuntu.
+- **`stork_agent`**: in container mode, missing `stork_agent_container_kea_mounts`
+  paths are created as empty directories. Podman refuses a missing bind
+  source, and Kea logging to stdout leaves no `/var/log/kea`.
+- New Molecule scenario `stork_container`, also run in CI:
+  - the Stork server from packages on Amazon Linux 2023, with a local
+    PostgreSQL 16;
+  - `kea_dhcp` in container mode (Kea 3.0.4) on an Amazon Linux 2023 node
+    with its own Docker engine;
+  - `stork_agent` in container mode next to it.
+
+  Stork monitors the daemon, and the idempotence run changes nothing.
+
 ## 1.4.0 — 2026-10-28
 
 Fixes from the first live run of a Stork agent sidecar inside `kea_dhcp`
