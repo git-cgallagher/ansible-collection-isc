@@ -4,10 +4,13 @@
 # Container mode runs each daemon as a systemd unit too, so the same handlers
 # apply; the unit reload comes first so restarts pick up a changed unit.
 
-- name: Reload systemd for Kea container units
+- name: Reload systemd for Kea units
   ansible.builtin.systemd_service:
     daemon_reload: true
-  when: kea_dhcp_deployment == 'container'
+  when:
+    - kea_dhcp_deployment in ['package', 'container']
+    - kea_dhcp__service_manager | default('none') == 'systemd'
+    - kea_dhcp_manage_service | bool
 
 - name: Restart Kea dhcp4
   ansible.builtin.service:

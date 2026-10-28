@@ -1,5 +1,7 @@
 {#- Builds the DhcpDdns object (kea-dhcp-ddns / D2) as JSON. Forward/reverse
-    zones and TSIG keys come from kea_dhcp_ddns_settings. -#}
+    zones, TSIG keys and the GSS-TSIG hook come from the DNS integration
+    (kea_dhcp__dns, see tasks/dns/main.yml); kea_dhcp_ddns_settings is merged
+    last, so it can override any of it. -#}
 {%- import 'config/_macros.j2' as m with context -%}
 {%- set cfg = {'ip-address': '127.0.0.1', 'port': 53001} -%}
 {%- set unix_sock = {'socket-type': 'unix', 'socket-name': m.socket_path('ddns')} -%}
@@ -36,6 +38,46 @@
       'severity': kea_dhcp_log_severity,
       'debuglevel': kea_dhcp_log_debuglevel}]}) -%}
 {%- set hk = namespace(libs=[]) -%}
+{#- DNS integration ----------------------------------------------------- -#}
+{%- set dns = kea_dhcp__dns | default({'mode': 'none'}) -%}
+{%- if dns.mode != 'none' -%}
+{%-   set srv = namespace(list=[]) -%}
+{%-   for s in dns.servers -%}
+{%-     set srv.list = srv.list + [{'ip-address': s.ip, 'port': s.port | default(53) | int}] -%}
+{%-   endfor -%}
+{%-   set keyname = {'key-name': dns.tsig_key.name} if dns.mode == 'tsig' else {} -%}
+{%-   set fwd = namespace(d=[]) -%}
+{%-   for z in dns.forward_zones -%}
+{%-     set fwd.d = fwd.d + [{'name': z if z.endswith('.') else z ~ '.', 'dns-servers': srv.list} | combine(keyname)] -%}
+{%-   endfor -%}
+{%-   set rev = namespace(d=[]) -%}
+{%-   for z in dns.reverse_zones -%}
+{%-     set rev.d = rev.d + [{'name': z if z.endswith('.') else z ~ '.', 'dns-servers': srv.list} | combine(keyname)] -%}
+{%-   endfor -%}
+{%-   set cfg = cfg | combine({'forward-ddns': {'ddns-domains': fwd.d}, 'reverse-ddns': {'ddns-domains': rev.d}}) -%}
+{%-   if dns.mode == 'tsig' -%}
+{%-     set cfg = cfg | combine({'tsig-keys': [{
+          'name': dns.tsig_key.name,
+          'algorithm': dns.tsig_key.algorithm | default(dns.tsig_algorithm),
+          'secret': dns.tsig_key.secret}]}) -%}
+{%-   elif dns.mode == 'gss' -%}
+{%-     set gss = namespace(servers=[]) -%}
+{%-     for s in dns.servers -%}
+{%-       set gss.servers = gss.servers + [{
+            'id': s.name,
+            'ip-address': s.ip,
+            'port': s.port | default(53) | int,
+            'server-principal': s.principal | default(dns.server_principal_format
+                | replace('{name}', s.name | lower) | replace('{domain}', dns.domain | lower) | replace('{realm}', dns.realm))}] -%}
+{%-     endfor -%}
+{%-     set params = {
+          'server-principal': gss.servers[0]['server-principal'],
+          'client-principal': dns.client_principal,
+          'client-keytab': 'FILE:' ~ dns.keytab_path,
+          'servers': gss.servers} | combine(dns.gss) -%}
+{%-     set hk.libs = hk.libs + [{'library': m.hook_path('libddns_gss_tsig.so'), 'parameters': params}] -%}
+{%-   endif -%}
+{%- endif -%}
 {%- for h in kea_dhcp_ddns_hooks_libraries + kea_dhcp_ddns_settings['hooks-libraries'] | default([]) -%}
 {%-   set hk.libs = hk.libs + [h | combine({'library': m.hook_path(h.library)})] -%}
 {%- endfor -%}

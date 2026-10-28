@@ -8,6 +8,8 @@
           + (kea_dhcp__pkgs.mysql if 'mysql' in kea_dhcp__db_types else [])
           + (kea_dhcp__pkgs.postgresql if 'postgresql' in kea_dhcp__db_types else [])
           + (kea_dhcp__pkgs.admin if kea_dhcp_db_schema_manage | bool else [])
+          + (kea_dhcp__dns.packages | map('extract', kea_dhcp__pkgs) | flatten)
+          + (kea_dhcp__os_krb5_tools if kea_dhcp__dns.install_krb5_tools | default(false) | bool else [])
           + kea_dhcp_packages_extra) | unique }}
   vars:
     kea_dhcp__pkgs: "{{ kea_dhcp__os_packages[kea_dhcp_package_source] }}"
@@ -15,6 +17,19 @@
       {{ ([kea_dhcp_dhcp4_lease_database, kea_dhcp_dhcp6_lease_database] + kea_dhcp_hosts_databases
           + kea_dhcp_config_backend.config_databases | default([]))
          | map(attribute='type') | list }}
+
+- name: Assert the DNS integration's packages exist for this OS and source
+  ansible.builtin.assert:
+    that:
+      - kea_dhcp__dns.packages | map('extract', kea_dhcp__pkgs) | select('equalto', []) | list | length == 0
+    fail_msg: >-
+      kea_dhcp_dns_integration={{ kea_dhcp_dns_integration }} needs {{ kea_dhcp__dns.packages | join(', ') }},
+      which {{ kea_dhcp_package_source }} packages on {{ ansible_facts['os_family'] }} don't provide.
+      Use ISC packages (kea_dhcp_package_source: isc) on Amazon Linux, EL or Debian/Ubuntu.
+    quiet: true
+  vars:
+    kea_dhcp__pkgs: "{{ kea_dhcp__os_packages[kea_dhcp_package_source] }}"
+  when: kea_dhcp_packages_override | length == 0
 
 - name: Install Kea packages
   ansible.builtin.package:

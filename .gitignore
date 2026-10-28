@@ -10,3 +10,5 @@ tests/kea_dhcp/output/
 tests/kea_dhcp/render/tls.json
 .cache/
 __pycache__/
+tests/kea_dhcp/render/test.keytab
+tests/kea_dhcp/render/tsig.secret

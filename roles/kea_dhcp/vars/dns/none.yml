@@ -1,0 +1,6 @@
+---
+# kea_dhcp_dns_integration: none — no DNS updates. Kea hands out addresses and
+# hostnames but never touches DNS; kea-dhcp-ddns is not enabled.
+mode: none
+packages: []
+dhcp_ddns_params: {}

@@ -19,8 +19,12 @@
 {% for f in kea_dhcp_files %}
 {%   set sec.data = sec.data | combine({'file-' ~ loop.index: f.content | default(lookup('ansible.builtin.file', f.src))}) %}
 {% endfor %}
+{% set gss = kea_dhcp__dns.mode | default('none') == 'gss' %}
+{% if gss %}
+{%   set sec.data = sec.data | combine({'dns-krb5.conf': lookup('ansible.builtin.template', 'dns/krb5.conf.j2')}) %}
+{% endif %}
 {% set data = sec.data %}
-{% set checksum = data | to_json | hash('sha256') %}
+{% set checksum = ((data | to_json) ~ (kea_dhcp__keytab_slurp.content if gss else '')) | hash('sha256') %}
 ---
 apiVersion: v1
 kind: Secret
@@ -30,6 +34,10 @@ metadata:
   labels: {{ meta.kea_dhcp__labels | to_json }}
 type: Opaque
 stringData: {{ data | to_json }}
+{% if gss %}
+# Binary keytab: base64 in `data`, never through stringData.
+data: {{ {'dns-keytab': kea_dhcp__keytab_slurp.content} | to_json }}
+{% endif %}
 
 
 {#- ---- Storage --------------------------------------------------------- -#}
@@ -108,6 +116,11 @@ spec:
 {%   for f in kea_dhcp_files %}
 {%     set mounts.items = mounts.items + [{'name': 'config', 'mountPath': f.dest, 'subPath': 'file-' ~ loop.index, 'readOnly': true}] %}
 {%   endfor %}
+{%   if gss and d == 'ddns' %}
+{%     set mounts.items = mounts.items + [
+         {'name': 'config', 'mountPath': kea_dhcp__dns.keytab_path, 'subPath': 'dns-keytab', 'readOnly': true},
+         {'name': 'config', 'mountPath': kea_dhcp__dns.krb5_conf_path, 'subPath': 'dns-krb5.conf', 'readOnly': true}] %}
+{%   endif %}
 {%   set ports = namespace(items=[]) %}
 {%   if d == 'dhcp4' %}{% set ports.items = [{'name': 'dhcpv4', 'containerPort': 67, 'protocol': 'UDP'}] %}{% endif %}
 {%   if d == 'dhcp6' %}{% set ports.items = [{'name': 'dhcpv6', 'containerPort': 547, 'protocol': 'UDP'}] %}{% endif %}
@@ -124,7 +137,9 @@ spec:
         'image': kea_dhcp_k8s_images[d],
         'imagePullPolicy': kea_dhcp_k8s_image_pull_policy,
         'command': ['/usr/sbin/' ~ kea_dhcp__binaries[d], '-c', kea_dhcp_config_dir ~ '/' ~ kea_dhcp__config_files[d]],
-        'env': [{'name': 'KEA_PIDFILE_DIR', 'value': '/tmp'}] + kea_dhcp_k8s_env,
+        'env': [{'name': 'KEA_PIDFILE_DIR', 'value': '/tmp'}]
+               + ([{'name': 'KRB5_CONFIG', 'value': kea_dhcp__dns.krb5_conf_path}] if gss and d == 'ddns' else [])
+               + kea_dhcp_k8s_env,
         'ports': ports.items,
         'volumeMounts': mounts.items + kea_dhcp_k8s_extra_volume_mounts,
         'resources': kea_dhcp_k8s_resources,

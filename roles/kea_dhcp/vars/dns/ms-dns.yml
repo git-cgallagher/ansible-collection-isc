@@ -1,0 +1,24 @@
+---
+# kea_dhcp_dns_integration: ms-dns — Microsoft DNS on Active Directory domain
+# controllers, zones set to "Secure only" dynamic updates. Updates are signed
+# with GSS-TSIG using a keytab for an AD service account whose UPN equals the
+# client principal (see the kea_dhcp_msdns role, which prepares the AD side).
+mode: gss
+packages: [gss_tsig]
+server_principal_format: "DNS/{name}.{domain}@{realm}"
+gss:
+  # ISC: the GSS anti-replay service can cause problems with Microsoft DNS.
+  gss-replay-flag: false
+  gss-sequence-flag: false
+  tkey-protocol: TCP
+  tkey-lifetime: 3600
+  fallback: false
+dhcp_ddns_params:
+  ddns-send-updates: true
+  # Windows clients register their own A records unless told otherwise; let
+  # Kea own them so leases and DNS stay in step.
+  ddns-override-client-update: true
+  ddns-replace-client-name: never
+  # Records a Windows client registered itself carry no DHCID, so the RFC 4703
+  # default (check-with-dhcid) would refuse to replace them forever.
+  ddns-conflict-resolution-mode: check-exists-with-dhcid

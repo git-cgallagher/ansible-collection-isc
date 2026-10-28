@@ -14,6 +14,7 @@ kea_dhcp__os_packages:
     mysql: [isc-kea-mysql]
     postgresql: [isc-kea-pgsql]
     admin: [isc-kea-admin]
+    gss_tsig: []  # not verified for ISC apks; GSS-TSIG asserts unsupported
   distro:
     dhcp4: [kea-dhcp4]
     dhcp6: [kea-dhcp6]
@@ -23,6 +24,7 @@ kea_dhcp__os_packages:
     mysql: [kea-hook-mysql-cb]
     postgresql: [kea-hook-pgsql-cb]
     admin: [kea-admin]
+    gss_tsig: []
 kea_dhcp__os_services:
   isc: &kea_dhcp_alpine_services
     dhcp4: kea-dhcp4
@@ -30,3 +32,5 @@ kea_dhcp__os_services:
     ddns: kea-dhcp-ddns
     ctrl_agent: kea-ctrl-agent
   distro: *kea_dhcp_alpine_services
+# Kerberos client tools (kinit/klist) for kea_dhcp_dns.install_krb5_tools.
+kea_dhcp__os_krb5_tools: [krb5]

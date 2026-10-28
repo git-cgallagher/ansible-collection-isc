@@ -35,6 +35,10 @@
     - name: Build configuration
       ansible.builtin.include_tasks: ../config/build.yml
 
+    - name: Read the GSS-TSIG keytab for the Secret
+      ansible.builtin.import_tasks: keytab.yml
+      when: kea_dhcp__dns.mode == 'gss'
+
     - name: Render manifests
       ansible.builtin.set_fact:
         kea_dhcp__k8s_manifests: "{{ lookup('ansible.builtin.template', 'k8s/instance.yml.j2') | ansible.builtin.from_yaml_all | select | list }}"

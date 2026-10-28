@@ -17,6 +17,9 @@
 - name: Validate cross-variable constraints
   ansible.builtin.import_tasks: assert.yml
 
+- name: Resolve the DNS integration
+  ansible.builtin.include_tasks: dns/main.yml
+
 - name: Deploy from OS packages
   ansible.builtin.include_tasks: package/main.yml
   when: kea_dhcp_deployment == 'package'

@@ -30,6 +30,11 @@ mkdir -p "$coll/ansible_collections/git_cgallagher"
 ln -s "$(cd ../.. && pwd)" "$coll/ansible_collections/git_cgallagher/isc"
 export ANSIBLE_COLLECTIONS_PATH="$coll:${ANSIBLE_COLLECTIONS_PATH:-$HOME/.ansible/collections}"
 
+# Throwaway DNS-integration inputs (never committed): random bytes stand in for
+# a keytab (kea -t doesn't read it) and a random TSIG secret.
+[[ -f render/test.keytab ]] || head -c 512 /dev/urandom > render/test.keytab
+[[ -f render/tsig.secret ]] || head -c 32 /dev/urandom | base64 > render/tsig.secret
+
 rm -rf output
 (cd render && ansible-playbook -i inventory.yml playbook.yml)
 python3 validate.py output

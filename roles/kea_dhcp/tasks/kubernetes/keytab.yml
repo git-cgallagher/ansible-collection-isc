@@ -1,0 +1,40 @@
+---
+# A keytab is binary: a text lookup would corrupt it in the Secret. Copy it to
+# a controller temp file (Ansible decrypts a vault-encrypted source on the
+# way), read it back as base64 with slurp, then delete the temp copy.
+- name: Stage the keytab on the controller
+  ansible.builtin.tempfile:
+    state: file
+    suffix: .keytab
+  register: kea_dhcp__keytab_tmp
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Read the keytab as base64
+  block:
+    - name: Copy the (possibly vault-encrypted) keytab to the temp file
+      ansible.builtin.copy:
+        src: "{{ kea_dhcp__dns.keytab_src }}"
+        dest: "{{ kea_dhcp__keytab_tmp.path }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+
+    - name: Slurp the keytab
+      ansible.builtin.slurp:
+        src: "{{ kea_dhcp__keytab_tmp.path }}"
+      register: kea_dhcp__keytab_slurp
+      delegate_to: localhost
+      become: false
+      no_log: true
+  always:
+    - name: Remove the staged keytab
+      ansible.builtin.file:
+        path: "{{ kea_dhcp__keytab_tmp.path }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      changed_when: false

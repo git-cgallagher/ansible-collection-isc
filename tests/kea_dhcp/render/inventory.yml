@@ -156,3 +156,43 @@ all:
         kea_dhcp_config_backend:
           enabled: true
           config_databases: [{type: postgresql, name: kea, host: 10.4.0.50, user: kea, password: example-not-secret}]
+    # 9. DNS integration: Microsoft DNS (AD) over GSS-TSIG, two DCs, reverse zone.
+    v30_dns_msdns:
+      hosts:
+        dnsms1: {kea_dhcp_k8s_node_name: n1}
+      vars:
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_dns_integration: ms-dns
+        kea_dhcp_dns:
+          domain: corp.example.com
+          servers: [{name: dc1, ip: 192.0.2.10}, {name: dc2, ip: 192.0.2.11}]
+          reverse_zones: [2.0.192.in-addr.arpa]
+          keytab_src: "{{ playbook_dir }}/test.keytab"
+    # 10. DNS integration: BIND 9 / FreeIPA over GSS-TSIG on Kea 3.2.
+    v32_dns_bind9_gss:
+      hosts:
+        dnsbind1: {kea_dhcp_k8s_node_name: n1}
+      vars:
+        kea_dhcp_version_series: "3.2"
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_dns_integration: bind9-gss-tsig
+        kea_dhcp_dns:
+          domain: ipa.example.test
+          realm: IPA.EXAMPLE.TEST
+          servers: [{name: ns1, ip: 192.0.2.20}]
+          keytab_src: "{{ playbook_dir }}/test.keytab"
+          dhcp_ddns_params: {ddns-replace-client-name: when-not-present}
+    # 11. DNS integration: RFC 2136 with a TSIG key.
+    v30_dns_rfc2136:
+      hosts:
+        dnstsig1: {kea_dhcp_k8s_node_name: n1}
+      vars:
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_dns_integration: rfc2136
+        kea_dhcp_dns:
+          domain: example.net
+          servers: [{name: ns1, ip: 192.0.2.30, port: 53}]
+          reverse_zones: [2.0.192.in-addr.arpa]
+          tsig_key:
+            name: kea-key
+            secret: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/tsig.secret') }}"

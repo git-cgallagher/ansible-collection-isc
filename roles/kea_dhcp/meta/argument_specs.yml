@@ -258,6 +258,21 @@ argument_specs:
       kea_dhcp_ha_defaults:
         type: dict
         description: Keys merged into every HA relationship.
+      kea_dhcp_dns_integration:
+        type: str
+        description: DNS service Kea updates; selects a preset from vars/dns/ (DDNS policy, signing method, GSS-TSIG defaults).
+        choices:
+          - none
+          - ms-dns
+          - bind9-gss-tsig
+          - rfc2136
+      kea_dhcp_dns:
+        type: dict
+        description: >-
+          DNS integration settings merged over the preset: domain, servers [{name, ip, port}], forward_zones,
+          reverse_zones, dhcp_ddns_params; GSS-TSIG: realm, client_principal, keytab_src, keytab_path, kdcs,
+          krb5_conf_path, gss, install_krb5_tools; rfc2136: tsig_key {name, secret, algorithm}.
+        no_log: true
       kea_dhcp_dhcp4_settings:
         type: dict
         description: Kea Dhcp4 keys deep-merged over the computed config.

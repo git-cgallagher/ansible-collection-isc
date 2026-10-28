@@ -73,6 +73,12 @@
 {#- DDNS ---------------------------------------------------------------- -#}
 {%- if kea_dhcp_ddns_enabled | bool -%}
 {%-   set cfg = cfg | combine({'dhcp-ddns': {'enable-updates': true}}) -%}
+{#-   DNS integration policy (preset, then kea_dhcp_dns.dhcp_ddns_params);
+      kea_dhcp_<family>_settings still win below. -#}
+{%-   set dns = kea_dhcp__dns | default({'mode': 'none'}) -%}
+{%-   if dns.mode != 'none' -%}
+{%-     set cfg = cfg | combine({'ddns-qualifying-suffix': dns.domain ~ '.'}) | combine(dns.dhcp_ddns_params) -%}
+{%-   endif -%}
 {%- endif -%}
 
 {#- loggers ------------------------------------------------------------- -#}
