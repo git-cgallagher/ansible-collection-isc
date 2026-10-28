@@ -97,8 +97,7 @@ directly
 - Each restart gives the pod a new IP, and registration state lives in an
   `emptyDir`, so `$(POD_IP)` addressing leaves stale machine entries behind.
   Prefer a stable per-pod Service name.
-- **Verified on k3s 1.33, with the earlier all-in-one version of these
-  manifests:** an in-cluster server plus sidecar agents registered
+- **Verified on k3s 1.33, with an earlier version of these manifests:** an in-cluster server plus sidecar agents registered
   unattended, and the bootstrap password rotated through a port-forward.
 - **This collection's own** server manifests and generated sidecar spec pass
   `kubectl apply --dry-run=server`. They have not yet run live alongside a

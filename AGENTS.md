@@ -5,11 +5,13 @@ holds the Kea role `kea_dhcp` and the Stork roles `stork_server`, `stork_agent`
 and `stork_repository`. Public repo `git-cgallagher/ansible-collection-isc`,
 published to Galaxy as `git_cgallagher.isc`.
 
-It **replaces**, with their full git history:
-- the standalone role `git-cgallagher.kea_dhcp` (repo `ansible-role-kea-dhcp`);
-- the collection `git_cgallagher.stork` (repo `ansible-collection-stork`).
+It **replaces** the standalone role `git-cgallagher.kea_dhcp` (repo
+`ansible-role-kea-dhcp`, archived), whose full git history is merged in under
+`roles/kea_dhcp`. Work on branches and PRs; `main` is protected.
 
-Both are retired. Work on branches and PRs; `main` is protected.
+⚠️ Other sessions may use `~/Code/ansible-collection-isc` at the same time:
+`git checkout -b` there carries their uncommitted work onto your branch. Do
+your work in a separate `git worktree` instead.
 
 ## Layout
 
