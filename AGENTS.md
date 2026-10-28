@@ -122,6 +122,12 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   renders itself as `0.0.0.0` and its partner as the partner's ClusterIP (verified live in
   Docker: both peers reach HOT-STANDBY).
 
+- Container mode validates configs with `<runtime> run --network host`: `kea -t` checks that the
+  configured interfaces exist, so `--network none` fails ("interface 'eth0' doesn't exist").
+- Never wrap a Jinja `{% for %}` that emits text across lines inside a YAML folded scalar (`>-`):
+  more-indented lines keep their newline, which split the generated `docker run` command
+  ("invalid reference format"). Build such strings with filters (zip/join/map), and avoid
+  `regex_replace` backreferences there too (`\\1` lost its backslash).
 - Container mode tests need a NATIVE-arch test node: dockerd (Go) crashes under QEMU, so the
   `kea_dhcp_container` node is built from its Dockerfile for the host's own architecture, and the
   amd64 Kea images run inside it through binfmt (`kea_dhcp_container_platform: linux/amd64`).
