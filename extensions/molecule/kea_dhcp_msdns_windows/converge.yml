@@ -25,6 +25,7 @@
     kea_dhcp_version_series: "3.0"
     kea_dhcp_interfaces: [lo]
     kea_dhcp_dhcp4_socket_type: udp
+    kea_dhcp_lease_cmds_enabled: true   # lease4-add / lease4-resend-ddns in verify
     kea_dhcp_dhcp4_settings:
       subnet4:
         - id: 1
