@@ -31,7 +31,7 @@
     - name: Create the realm, principals and keytabs
       ansible.builtin.shell:
         cmd: |
-          set -e
+          set -eo pipefail
           [ -f /var/lib/krb5kdc/principal ] && exit 0
           kdb5_util create -s -r EXAMPLE.TEST -P "$(head -c 24 /dev/urandom | base64)" >/dev/null
           kadmin.local -q "addprinc -randkey DNS/ns1.example.test@EXAMPLE.TEST" >/dev/null
@@ -127,16 +127,15 @@
         dest: "{{ kea_dns_ephemeral }}/kea.keytab"
         flat: true
 
-    - name: Read the TSIG secret
-      ansible.builtin.shell:
-        cmd: "sed -n 's/.*secret \"\\(.*\\)\";/\\1/p' /etc/bind/kea-key.conf"
+    - name: Read the TSIG key file
+      ansible.builtin.slurp:
+        src: /etc/bind/kea-key.conf
       register: kea_dns_tsig
-      changed_when: false
       no_log: true
 
     - name: Hand the TSIG secret to the controller (ephemeral dir only)
       ansible.builtin.copy:
-        content: "{{ kea_dns_tsig.stdout | trim }}"
+        content: "{{ kea_dns_tsig.content | b64decode | regex_search('secret \"([^\"]+)\"', '\\1') | first }}"
         dest: "{{ kea_dns_ephemeral }}/tsig.secret"
         mode: "0600"
       delegate_to: localhost
