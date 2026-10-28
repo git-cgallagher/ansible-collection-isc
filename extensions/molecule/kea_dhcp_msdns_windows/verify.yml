@@ -1,0 +1,172 @@
+---
+- name: The AD and DNS objects kea_dhcp_msdns created
+  hosts: dc01
+  gather_facts: false
+  tasks:
+    - name: Read the service account and the zones
+      ansible.windows.win_powershell:
+        parameters:
+          Domain: "{{ lab_domain }}"
+          ReverseZone: "{{ lab_reverse_zone }}"
+        script: |
+          param($Domain, $ReverseZone)
+          $ErrorActionPreference = 'Stop'
+          $Ansible.Changed = $false
+          $u = Get-ADUser -Identity kea -Properties userPrincipalName, servicePrincipalName, memberOf
+          [ordered]@{
+              upn          = $u.userPrincipalName
+              spns         = @($u.servicePrincipalName)
+              update_proxy = [bool]($u.memberOf -match '^CN=DnsUpdateProxy,')
+              forward      = [string](Get-DnsServerZone -Name $Domain).DynamicUpdate
+              reverse      = [string](Get-DnsServerZone -Name $ReverseZone).DynamicUpdate
+          }
+      register: kea_win_ad
+
+    - name: UPN equals the client principal; SPN, DnsUpdateProxy and secure zones are set
+      ansible.builtin.assert:
+        that:
+          - kea_win_ad.output[0].upn == 'DHCP/kea.' ~ lab_domain ~ '@' ~ lab_realm
+          - ('DHCP/kea.' ~ lab_domain) in kea_win_ad.output[0].spns
+          - kea_win_ad.output[0].update_proxy
+          - kea_win_ad.output[0].forward == 'Secure'
+          - kea_win_ad.output[0].reverse == 'Secure'
+        fail_msg: "{{ kea_win_ad.output[0] }}"
+        quiet: true
+
+- name: Kea authenticates to the DC and sends GSS-TSIG signed updates
+  hosts: kea-win
+  gather_facts: false
+  vars:
+    kea_win_fqdn: "client1.{{ lab_domain }}"
+    kea_win_ip1: 10.60.0.111
+    kea_win_ip2: 10.60.0.112
+    # Kept inline (not a .py file) so ansible-test doesn't treat it as collection code.
+    kea_win_cmd_script: |
+      import json, socket, sys
+      def cmd(c):
+          s = socket.socket(socket.AF_UNIX)
+          s.connect("/var/run/kea/kea4-ctrl-socket")
+          s.sendall(json.dumps(c).encode())
+          d = b""
+          while True:
+              x = s.recv(65536)
+              if not x:
+                  break
+              d += x
+          r = json.loads(d)
+          return r[0] if isinstance(r, list) else r
+      name, ip = sys.argv[1], sys.argv[2]
+      add = cmd({"command": "lease4-add", "arguments": {"ip-address": ip, "hw-address": "1a:1b:1c:1d:1e:1f",
+                 "hostname": name, "fqdn-fwd": True, "fqdn-rev": True, "valid-lft": 3600}})
+      res = cmd({"command": "lease4-resend-ddns", "arguments": {"ip-address": ip}})
+      print(add["result"], res["result"])
+    # Read on the DC: the records as Microsoft DNS stores them.
+    kea_win_dns_script: |
+      param($Zone, $Name, $Type)
+      $Ansible.Changed = $false
+      $r = Get-DnsServerResourceRecord -ZoneName $Zone -Name $Name -RRType $Type -ErrorAction SilentlyContinue
+      @($r | ForEach-Object {
+          if ($Type -eq 'A') { $_.RecordData.IPv4Address.IPAddressToString } else { $_.RecordData.PtrDomainName }
+      })
+  tasks:
+    - name: Get a ticket with the deployed keytab and Kea's krb5.conf
+      ansible.builtin.command:
+        argv: [kinit, -k, -t, /etc/kea/kea.keytab, "DHCP/kea.{{ lab_domain }}@{{ lab_realm }}"]
+      environment:
+        KRB5_CONFIG: /etc/kea/krb5.conf
+        KRB5CCNAME: FILE:/tmp/kea-verify.ccache
+      changed_when: false
+
+    - name: Create the control socket directory Kea 3.x requires
+      ansible.builtin.file:
+        path: /var/run/kea
+        state: directory
+        owner: kea
+        group: kea
+        mode: "0750"
+
+    - name: Start kea-dhcp-ddns with its log in a file
+      ansible.builtin.shell:
+        cmd: exec /usr/sbin/kea-dhcp-ddns -c /etc/kea/kea-dhcp-ddns.conf > /var/log/kea-ddns-verify.log 2>&1
+      environment:
+        KRB5_CONFIG: /etc/kea/krb5.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+    - name: Start kea-dhcp4
+      ansible.builtin.command:
+        cmd: /usr/sbin/kea-dhcp4 -c /etc/kea/kea-dhcp4.conf
+      async: 3600
+      poll: 0
+      changed_when: true
+
+    - name: Install the control-socket helper
+      ansible.builtin.copy:
+        content: "{{ kea_win_cmd_script }}"
+        dest: /usr/local/lib/kea-ddns-cmd.py
+        mode: "0644"
+
+    - name: Wait for the DHCPv4 control socket
+      ansible.builtin.wait_for:
+        path: /var/run/kea/kea4-ctrl-socket
+        timeout: 120
+
+    - name: Verify the DNS updates (the log is shown on failure)
+      block:
+        - name: Lease a first address and send its update
+          ansible.builtin.command:
+            cmd: "python3 /usr/local/lib/kea-ddns-cmd.py {{ kea_win_fqdn }}. {{ kea_win_ip1 }}"
+          register: kea_win_first
+          changed_when: true
+          failed_when: kea_win_first.stdout != '0 0'
+
+        - name: The A record lands in Microsoft DNS
+          ansible.windows.win_powershell:
+            script: "{{ kea_win_dns_script }}"
+            parameters: {Zone: "{{ lab_domain }}", Name: client1, Type: A}
+          register: kea_win_a1
+          until: kea_win_a1.output == [kea_win_ip1]
+          retries: 30
+          delay: 3
+          delegate_to: dc01
+
+        - name: The PTR record lands in Microsoft DNS
+          ansible.windows.win_powershell:
+            script: "{{ kea_win_dns_script }}"
+            parameters: {Zone: "{{ lab_reverse_zone }}", Name: "{{ kea_win_ip1.split('.')[-1] }}", Type: PTR}
+          register: kea_win_ptr1
+          until: kea_win_ptr1.output == [kea_win_fqdn ~ '.']
+          retries: 30
+          delay: 3
+          delegate_to: dc01
+
+        # Same client (same hw address, so same DHCID) on a new address: the
+        # update must replace its own A record (ms-dns uses
+        # check-exists-with-dhcid conflict resolution).
+        - name: Move the client to a second address and send its update
+          ansible.builtin.command:
+            cmd: "python3 /usr/local/lib/kea-ddns-cmd.py {{ kea_win_fqdn }}. {{ kea_win_ip2 }}"
+          register: kea_win_second
+          changed_when: true
+          failed_when: kea_win_second.stdout != '0 0'
+
+        - name: The A record follows the client to its new address
+          ansible.windows.win_powershell:
+            script: "{{ kea_win_dns_script }}"
+            parameters: {Zone: "{{ lab_domain }}", Name: client1, Type: A}
+          register: kea_win_a2
+          until: kea_win_a2.output == [kea_win_ip2]
+          retries: 30
+          delay: 3
+          delegate_to: dc01
+      rescue:
+        - name: Read the kea-dhcp-ddns log
+          ansible.builtin.command:
+            cmd: tail -n 60 /var/log/kea-ddns-verify.log
+          register: kea_win_log
+          changed_when: false
+
+        - name: Fail with the log
+          ansible.builtin.fail:
+            msg: "DNS update check failed. kea-dhcp-ddns log tail: {{ kea_win_log.stdout_lines }}"

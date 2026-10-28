@@ -1,0 +1,10 @@
+---
+collections:
+  - name: ansible.windows    # win_powershell, win_feature, win_reboot (and kea_dhcp_msdns's Windows backend)
+    version: '>=2.0.0'
+  - name: microsoft.ad       # microsoft.ad.domain promotes the VM to a DC
+    version: '>=1.6.0'
+  - name: community.docker   # the docker connection to the Kea container
+    version: '>=3.0.0'
+  - name: community.general  # a kea_dhcp dependency (apk on Alpine)
+    version: '>=9.0.0'

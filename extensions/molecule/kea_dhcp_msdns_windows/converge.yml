@@ -1,0 +1,48 @@
+---
+- name: Prepare Active Directory with kea_dhcp_msdns (Windows backend)
+  hosts: dc01
+  gather_facts: true
+  vars:
+    kea_dhcp_msdns_domain: "{{ lab_domain }}"
+    kea_dhcp_msdns_service_account_password: "{{ lab_kea_password }}"
+    kea_dhcp_msdns_reverse_zones: ["{{ lab_reverse_zone }}"]
+    kea_dhcp_msdns_keytab_dest: "{{ lab_keytab }}"
+  tasks:
+    - name: Apply kea_dhcp_msdns from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp_msdns
+
+# The container shares the runner's network namespace: the DC's DNS and KDC
+# are the QEMU forwards on 127.0.0.1. Kea only serves leases created over its
+# control socket, so it listens on loopback with UDP sockets.
+- name: Deploy Kea with the ms-dns integration
+  hosts: kea-win
+  gather_facts: false
+  vars:
+    lab_dc: "{{ molecule_yml.platforms | selectattr('name', 'equalto', 'dc01') | first }}"
+    kea_dhcp_bootstrap_python: true
+    kea_dhcp_manage_service: false
+    kea_dhcp_version_series: "3.0"
+    kea_dhcp_interfaces: [lo]
+    kea_dhcp_dhcp4_socket_type: udp
+    kea_dhcp_dhcp4_settings:
+      subnet4:
+        - id: 1
+          subnet: "{{ lab_subnet }}"
+          pools: [{pool: 10.60.0.100 - 10.60.0.200}]
+    kea_dhcp_dns_integration: ms-dns
+    kea_dhcp_dns:
+      domain: "{{ lab_domain }}"
+      realm: "{{ lab_realm }}"
+      servers:
+        - name: "{{ lab_hostname }}"
+          ip: 127.0.0.1
+          port: "{{ lab_dc.dns_port }}"
+      kdcs: ["127.0.0.1:{{ lab_dc.kdc_port }}"]
+      reverse_zones: ["{{ lab_reverse_zone }}"]
+      keytab_src: "{{ lab_keytab }}"
+      install_krb5_tools: true
+  tasks:
+    - name: Apply kea_dhcp from this checkout
+      ansible.builtin.include_role:
+        name: git_cgallagher.isc.kea_dhcp
