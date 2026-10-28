@@ -2,9 +2,11 @@
 
 For every role under roles/, the "main" entry point must:
 - document every variable in defaults/main.yml, and nothing that isn't there;
+- give every option a type and a description, and every list its elements;
 - declare a type that literal (non-templated) defaults satisfy, including
   list elements and choices;
-- mark non-bool options whose name ends in password, token or secret no_log.
+- mark non-bool options whose name ends in password, token, secret, api_key
+  or private_key no_log.
 
 Variables starting with "_" or containing "__" are internal and skipped.
 Run from the repo root: python tests/argument_specs/check.py
@@ -16,7 +18,7 @@ import sys
 
 import yaml
 
-SECRET_SUFFIXES = ("password", "token", "secret")
+SECRET_SUFFIXES = ("password", "token", "secret", "api_key", "private_key")
 TYPES = {
     "str": (str,),
     "path": (str,),
@@ -74,6 +76,10 @@ def check_role(role: pathlib.Path) -> list[str]:
         opt = opt or {}
         if not opt.get("description"):
             errors.append(f"{role.name}: option '{name}' has no description")
+        if not opt.get("type"):
+            errors.append(f"{role.name}: option '{name}' has no type")
+        if opt.get("type") == "list" and not opt.get("elements"):
+            errors.append(f"{role.name}: list option '{name}' has no elements")
         # A bool switch such as *_manage_secret holds no secret.
         if name.endswith(SECRET_SUFFIXES) and opt.get("type", "str") != "bool" and not opt.get("no_log"):
             errors.append(f"{role.name}: option '{name}' looks secret but isn't no_log")

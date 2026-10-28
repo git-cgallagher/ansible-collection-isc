@@ -21,6 +21,11 @@ for role in roles/*/; do
   role="$(basename "$role")"
   ansible-doc -t role "git_cgallagher.isc.$role" >/dev/null
   echo "ansible-doc: git_cgallagher.isc.$role OK"
+  # A new role needs a bad-value case in runtime.yml too.
+  if ! grep -q "argspec_role: $role[ ,}]" tests/argument_specs/runtime.yml; then
+    echo "ERROR: tests/argument_specs/runtime.yml has no case for $role" >&2
+    exit 1
+  fi
 done
 
 ansible-playbook tests/argument_specs/runtime.yml
