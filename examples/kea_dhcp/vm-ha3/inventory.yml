@@ -5,7 +5,7 @@
 #     kea1 and kea2 are lost, promote it by hand (change its role to primary,
 #     re-run the play) and it already holds the full lease database.
 # Kea allows only two active servers per relationship; extra servers are backups.
-# Tested by molecule/kea_dhcp_ha3 (states + a real failover).
+# Tested by extensions/molecule/kea_dhcp_ha3 (states + a real failover).
 all:
   children:
     kea:

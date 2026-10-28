@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 — 2026-10-28
+
+- Molecule scenarios moved from `molecule/` to `extensions/molecule/`, the
+  layout `ansible-creator` scaffolds for collections, which Molecule expects.
+  Run them from the repo root as before (`molecule test -s <scenario>`). No
+  role changes; the published collection's contents are unchanged apart from
+  docs.
+
 ## 1.3.0 — 2026-10-28
 
 - **`kea_dhcp`**: new deployment mode `container`. It runs ISC's Kea images on
