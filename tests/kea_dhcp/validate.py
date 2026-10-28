@@ -32,7 +32,7 @@ for manifest in sorted(out.rglob("*.yaml")):
                 src = pathlib.Path(tmp) / m["subPath"]  # subPaths are unique per pod
                 src.write_text(secret["stringData"][m["subPath"]])
                 args += ["-v", f"{src}:{m['mountPath']}:ro"]
-            binary, _, conf = ctr["command"]
+            binary, conf = ctr["command"][0], ctr["command"][2]
             cmd = ["docker", "run", "--rm", "--platform", "linux/amd64", *args,
                    ctr["image"], binary, "-t", conf]
             res = subprocess.run(cmd, capture_output=True, text=True, check=False)  # return code inspected below
