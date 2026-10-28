@@ -69,7 +69,7 @@ All variables are in [`meta/argument_specs.yml`](meta/argument_specs.yml), and [
 
 A second run must change nothing.
 
-The **Windows backend** is linted but hasn't run in CI, because no Windows domain controller is available there. Run it against a lab DC before production.
+`molecule test -s kea_dhcp_msdns_windows` runs the **Windows backend** against a real Windows Server 2022 domain controller. The DC runs Microsoft DNS and is booted under QEMU/KVM. Kea's A and PTR updates are read back out of Microsoft DNS. It needs Linux with KVM, so CI runs it only on demand: `gh workflow run windows-dc.yml`. See [its README](../../extensions/molecule/kea_dhcp_msdns_windows/README.md).
 
 ## License
 

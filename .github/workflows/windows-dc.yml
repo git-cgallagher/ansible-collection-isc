@@ -3,20 +3,17 @@ name: windows-dc
 # kea_dhcp_dns_integration: ms-dns against a real Windows Server 2022 domain
 # controller (Microsoft DNS): Molecule boots the DC under QEMU/KVM on the
 # runner, kea_dhcp_msdns prepares AD with its Windows backend, and Kea in an
-# AL2023 x86-64 container sends GSS-TSIG signed updates to it. ~45 min.
+# AL2023 x86-64 container sends GSS-TSIG signed updates to it.
 #
-# Not a required check (path-filtered, third-party box download, long).
+# Manual only (validated green 2026-10-28 on PR #12, run 40717463922): it takes
+# ~15 min and depends on a third-party box download, so it isn't a PR or
+# required check. Run it after changing kea_dhcp_msdns, the ms-dns preset or
+# the DDNS templates:
+#   gh workflow run windows-dc.yml --repo git-cgallagher/ansible-collection-isc --ref <branch>
+# To validate a branch before this file is on main, add a temporary
+# pull_request trigger (how PR #12 ran it).
 
 on:
-  pull_request:
-    paths:
-      - roles/kea_dhcp_msdns/**
-      - roles/kea_dhcp/vars/dns/**
-      - roles/kea_dhcp/tasks/dns/**
-      - roles/kea_dhcp/templates/dns/**
-      - roles/kea_dhcp/templates/config/ddns.json.j2
-      - extensions/molecule/kea_dhcp_msdns_windows/**
-      - .github/workflows/windows-dc.yml
   workflow_dispatch:
 
 permissions:
