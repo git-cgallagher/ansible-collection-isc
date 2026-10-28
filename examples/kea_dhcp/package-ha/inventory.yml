@@ -1,5 +1,6 @@
 ---
-# Two Kea 3.0 servers in hot-standby on bare metal / VMs (Alpine or Debian or EL).
+# Two Kea 3.0 servers in hot-standby on Amazon Linux 2023 VMs (minimal works;
+# the play installs Python first). Any supported OS works the same way.
 all:
   children:
     kea:
@@ -8,7 +9,8 @@ all:
         kea2: {ansible_host: 192.0.2.12}
       vars:
         kea_dhcp_version_series: "3.0"
-        kea_dhcp_interfaces: [eth0]
+        # AL2023's NIC name on EC2 Nitro; check `ip -br link` on your VMs.
+        kea_dhcp_interfaces: [ens5]
         kea_dhcp_ha_enabled: true
         kea_dhcp_ha_mode: hot-standby
         kea_dhcp_ha_peers:

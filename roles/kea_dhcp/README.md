@@ -4,9 +4,9 @@ Part of the [`git_cgallagher.isc`](../../README.md) collection. This role
 was previously the standalone Galaxy role `git-cgallagher.kea_dhcp`; see
 [Migrating from the standalone role](#migrating-from-the-standalone-role).
 
-Installs and configures [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS, in one of two ways:
+Installs and configures [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS, in one of three ways:
 
-- **Packages**: installs Kea on Alpine (OpenRC), Debian/Ubuntu or the RHEL family/Fedora (systemd), from ISC's repositories, your own mirrors, or the distro's packages.
+- **Packages**: installs Kea on **Amazon Linux 2023** (the primary, most-tested platform, minimal image included), the RHEL family/Fedora, Debian/Ubuntu or Alpine (OpenRC), from ISC's repositories, your own mirrors, or the distro's packages.
 - **Containers on a host**: runs ISC's Kea images under systemd with Podman or Docker, on any systemd host.
 - **Kubernetes**: applies Kea to Talos, EKS or any conformant cluster from the controller, or only renders the manifests for GitOps.
 
@@ -26,16 +26,16 @@ Both paths build the Kea configuration the same way. The role computes the parts
   - `kubernetes.core`: for Kubernetes mode, plus the `kubernetes` Python package on the controller.
 - Package mode needs Python on the target. On minimal images, set `kea_dhcp_bootstrap_python: true` and `gather_facts: false`. RHEL-family hosts need `dnf`; `-minimal` images ship only `microdnf`, and the bootstrap installs `dnf` for you.
 - EL hosts (RHEL, Rocky, Alma and similar) need **EPEL**, because Kea's RPMs, ISC's and the distro's alike, depend on `log4cplus`. The role installs `epel-release` (or the release RPM on RHEL). Turn this off with `kea_dhcp_epel_manage: false` if you mirror EPEL yourself.
-- **Amazon Linux 2023** has no Kea packages of its own, and ISC's `amzn/2023` repositories are empty. The role therefore installs **ISC's EL9 RPMs**, which run there, and takes `log4cplus` from a repo file for EPEL 9 restricted to that one package (`includepkgs=log4cplus*`). Neither ISC nor Amazon supports this combination; it is tested in CI on x86_64. ISC's EL9 builds also exist for arm64 (Graviton), which was checked by hand.
+- **Amazon Linux 2023** has no Kea packages of its own, and ISC's `amzn/2023` repositories are empty. The role therefore installs **ISC's EL9 RPMs**, which run there, and takes `log4cplus` from a repo file for EPEL 9 restricted to that one package (`includepkgs=log4cplus*`). Neither ISC nor Amazon supports this combination; it's the role's most-tested path (see [Supported platforms](#supported-platforms)), on x86-64. ISC's EL9 builds also exist for arm64 (Graviton); a hand run of the 3-node scenario passed there, but CI doesn't cover it.
 
 ### Supported platforms
 
 | Deployment | Platforms |
 |---|---|
-| Packages | Alpine 3.20+ (OpenRC) · Debian 12/13 · Ubuntu 22.04/24.04 · RHEL/Rocky/Alma 8–10 · Fedora · Amazon Linux 2023, including minimal (systemd) |
+| Packages | **Amazon Linux 2023**, including minimal (primary) · RHEL/Rocky/Alma 8–10 · Fedora · Debian 12/13 · Ubuntu 22.04/24.04 (systemd) · Alpine 3.20+ (OpenRC) |
 | Kubernetes | Talos · Amazon EKS · any conformant cluster (k3s, kubeadm, RKE2…) on **amd64** nodes (ISC images are amd64-only) |
 
-CI tests package installs on Debian 12, Ubuntu 24.04, Rocky 9, Amazon Linux 2023 (standard and minimal) and Alpine 3.20/3.22. The other listed versions use the same package names and repositories but aren't tested.
+**Amazon Linux 2023 is tested most:** CI installs packages on AL2023 standard and minimal, and runs the 3-node HA scenario (including a real failover) and the container-mode scenario on AL2023 nodes. Those AL2023 jobs are required to pass before anything merges. All of it runs on **x86-64**, the expected deployment architecture. CI also tests package installs on Debian 12, Ubuntu 24.04, Rocky 9 and Alpine 3.20/3.22. The other listed versions use the same package names and repositories but aren't tested.
 
 ## Installation
 
@@ -96,13 +96,17 @@ No role dependencies. Collections are listed under [Requirements](#requirements)
 
 ## Example Playbook
 
+On Amazon Linux 2023 (minimal or standard):
+
 ```yaml
 - hosts: dhcp
   become: true
+  gather_facts: false   # AL2023 minimal has no Python yet; the role installs it first
   roles:
     - role: git_cgallagher.isc.kea_dhcp
       vars:
-        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_bootstrap_python: true
+        kea_dhcp_interfaces: [ens5]   # AL2023's NIC name on EC2 Nitro; check `ip -br link` on your VMs
         kea_dhcp_dhcp4_settings:
           subnet4:
             - id: 1
@@ -114,8 +118,8 @@ No role dependencies. Collections are listed under [Requirements](#requirements)
 The role makes no default assumptions about the network. It **fails** if no interface is set and adds no subnets of its own. Ready-to-adapt inventories are in the collection's
 [`examples/kea_dhcp/`](../../examples/kea_dhcp/):
 
-- [`package-ha`](../../examples/kea_dhcp/package-ha/): HA pair on VMs or bare metal.
-- [`vm-ha3`](../../examples/kea_dhcp/vm-ha3/): three VMs, primary + standby + backup.
+- [`vm-ha3`](../../examples/kea_dhcp/vm-ha3/): three Amazon Linux 2023 VMs, primary + standby + backup.
+- [`package-ha`](../../examples/kea_dhcp/package-ha/): HA pair of Amazon Linux 2023 VMs (any supported OS works).
 - [`talos-ha`](../../examples/kea_dhcp/talos-ha/): HA pair on Talos with host networking.
 - [`eks-relay`](../../examples/kea_dhcp/eks-relay/): relayed DHCP on EKS with an RDS lease database.
 
@@ -187,7 +191,7 @@ How the HA config is assembled:
 
 `kea_dhcp_deployment: container` runs ISC's Kea images on the inventory host with Podman or Docker, one systemd unit per daemon (`kea-dhcp4-container`, `kea-dhcp6-container`, `kea-dhcp-ddns-container`, and `kea-ctrl-agent-container` on 2.6). Use it on any systemd host where packages aren't an option, or to keep Kea's version independent of the OS.
 
-- **Runtime:** `kea_dhcp_container_runtime: auto` picks Podman if it's installed, otherwise Docker. The role doesn't install a runtime (Amazon Linux 2023: `dnf install docker`).
+- **Runtime:** `kea_dhcp_container_runtime: auto` picks Podman if it's installed, otherwise Docker. The role doesn't install a runtime. On Amazon Linux 2023 (the tested host), run `dnf install docker && systemctl enable --now docker` first.
 - **Networking:** containers use `--network host`, so raw DHCP sockets, relays and HA listeners behave as with packages. Set `kea_dhcp_interfaces` to the host's NICs.
 - **Configs:** rendered on the host into `kea_dhcp_config_dir` and validated with `kea-<daemon> -t` **inside the image** before they're installed. They're bind-mounted read-only at the same paths, together with any directory holding `kea_dhcp_files` or API credentials, so every path in the config still holds.
 - **State:** leases live in `kea_dhcp_data_dir` on the host (mounted as `/var/lib/kea`). On 2.6, `kea_dhcp_container_run_dir` is shared as `/var/run/kea` between Kea and the control agent. `KEA_PIDFILE_DIR=/tmp` keeps stale PID files from blocking restarts.

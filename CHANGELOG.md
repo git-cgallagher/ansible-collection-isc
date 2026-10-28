@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.2 — 2026-10-28
+
+- Amazon Linux 2023 on x86-64 is now the primary tested platform for `kea_dhcp`:
+  - The 3-node HA scenario (`kea_dhcp_ha3`) runs on `amazonlinux:2023-minimal`
+    nodes (x86-64).
+  - The container-mode scenario's test nodes are Amazon Linux 2023 with
+    systemd and AL2023's own `docker` package.
+  - The AL2023 Molecule jobs are required checks for merging.
+- Docs and examples lead with Amazon Linux 2023: quick start, the
+  supported-platforms table, and the `vm-ha3` and `package-ha` inventories
+  (NIC `ens5`). No role changes.
+
 ## 1.3.1 — 2026-10-28
 
 - Molecule scenarios moved from `molecule/` to `extensions/molecule/`, the

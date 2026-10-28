@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [kea-debian12, kea-ubuntu2404, kea-rocky9, kea-al2023, kea-al2023-min, kea-alpine-isc, kea-alpine-distro]
+        platform: [kea-al2023, kea-al2023-min, kea-rocky9, kea-debian12, kea-ubuntu2404, kea-alpine-isc, kea-alpine-distro]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -124,8 +124,8 @@ jobs:
       - run: molecule test -s kea_dhcp --platform-name ${{ matrix.platform }}
 
   molecule-kea-ha3:
-    # Three-node HA (primary + standby + backup): starts Kea, checks the HA
-    # states, then a real failover.
+    # Three-node HA (primary + standby + backup) on Amazon Linux 2023 minimal:
+    # starts Kea, checks the HA states, then a real failover.
     name: molecule kea_dhcp_ha3
     runs-on: ubuntu-latest
     steps:
@@ -146,7 +146,7 @@ jobs:
       - run: molecule test -s kea_dhcp_ha3
 
   molecule-kea-container:
-    # Container mode: systemd + Docker inside each test node, Kea under units.
+    # Container mode: AL2023 nodes with systemd + Docker, Kea under units.
     name: molecule kea_dhcp_container
     runs-on: ubuntu-latest
     steps:

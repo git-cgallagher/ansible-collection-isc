@@ -1,6 +1,6 @@
 ---
-# Container mode (kea_dhcp_deployment: container): each test node runs systemd
-# and its own Docker engine, and the role runs Kea's ISC images there under
+# Container mode (kea_dhcp_deployment: container): each test node is Amazon
+# Linux 2023 running systemd and its own Docker engine, and the role runs Kea's ISC images there under
 # systemd units. Nodes use the host's native architecture; the amd64 Kea
 # images run through emulation where needed (kea_dhcp_container_platform).
 dependency:
@@ -16,7 +16,7 @@ platforms:
     pre_build_image: false
     privileged: true
     cgroupns_mode: host
-    command: /lib/systemd/systemd
+    command: /usr/lib/systemd/systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
       - /var/lib/docker
@@ -29,7 +29,7 @@ platforms:
     pre_build_image: false
     privileged: true
     cgroupns_mode: host
-    command: /lib/systemd/systemd
+    command: /usr/lib/systemd/systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
       - /var/lib/docker

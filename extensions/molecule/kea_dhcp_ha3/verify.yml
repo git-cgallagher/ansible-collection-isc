@@ -9,8 +9,8 @@
       ansible.builtin.file:
         path: /var/run/kea
         state: directory
-        owner: _kea
-        group: _kea
+        owner: kea
+        group: kea
         mode: "0750"
 
     # async + poll 0 detaches Kea through Ansible's async wrapper, so the
@@ -65,7 +65,7 @@
       failed_when: kea_ha3_state.stdout != kea_ha3_expected[inventory_hostname]
 
     - name: Stop the primary
-      # Debian slim has no procps (pkill); Kea records its PID here.
+      # Minimal images have no procps (pkill); Kea records its PID here.
       ansible.builtin.shell:
         cmd: kill "$(cat /var/run/kea/kea-dhcp4.kea-dhcp4.pid)"
       changed_when: true

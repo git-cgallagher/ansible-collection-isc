@@ -134,6 +134,9 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - Container mode tests need a NATIVE-arch test node: dockerd (Go) crashes under QEMU, so the
   `kea_dhcp_container` node is built from its Dockerfile for the host's own architecture, and the
   amd64 Kea images run inside it through binfmt (`kea_dhcp_container_platform: linux/amd64`).
+- **Amazon Linux 2023 on x86-64 is the owner's primary platform (2026-10-28).** Test it first and keep its
+  Molecule jobs (`kea-al2023`, `kea-al2023-min`, `kea_dhcp_ha3`, `kea_dhcp_container`) required in
+  the `main protection` ruleset. EL packages name the Kea user `kea` (Debian: `_kea`).
 - Amazon Linux 2023: ISC's `amzn/2023` repos exist but are EMPTY (168-byte primary index), and AL2023
   ships no kea/log4cplus. The role maps AL2023 to ISC's `el/9` repo plus an EPEL 9 repo restricted to
   `log4cplus*` (`epel-release` needs `redhat-release`, which AL2023 lacks). AL2023 minimal's `dnf` is
