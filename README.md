@@ -115,9 +115,12 @@ collections:
         stork_agent_server_url: http://stork-server.stork.svc.cluster.local:8080
         stork_agent_server_token: "{{ vault_stork_server_token }}"
         stork_agent_k8s_namespace: kea-dhcp
+        # Service network mode (EKS): a stable per-peer name, not the pod IP.
+        stork_agent_k8s_address: "kea-{{ inventory_hostname }}-ha.kea-dhcp.svc.cluster.local"
     - role: git_cgallagher.isc.kea_dhcp
       vars:
         kea_dhcp_deployment: kubernetes
+        # Also gives the sidecar Kea's config mounts.
         kea_dhcp_k8s_share_process_namespace: true
         kea_dhcp_k8s_extra_containers: "{{ stork_agent_k8s_containers }}"
         kea_dhcp_k8s_extra_volumes: "{{ stork_agent_k8s_volumes }}"
@@ -134,8 +137,8 @@ Stork sidecar wiring, including how its mounts must mirror Kea's, is in
 | `ansible-galaxy role install git-cgallagher.kea_dhcp` | `ansible-galaxy collection install git_cgallagher.isc` |
 | `role: git-cgallagher.kea_dhcp` | `role: git_cgallagher.isc.kea_dhcp` |
 
-The variables are unchanged. The only addition is
-`kea_dhcp_k8s_share_process_namespace`, which defaults to `false`.
+The variables are unchanged. New `kea_dhcp` variables since then are listed
+in [CHANGELOG.md](CHANGELOG.md); all of them default to the old behaviour.
 
 ## Release notes
 

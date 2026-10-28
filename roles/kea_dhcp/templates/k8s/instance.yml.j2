@@ -91,7 +91,7 @@ spec:
 {% endif %}
 
 {#- ---- Containers ------------------------------------------------------ -#}
-{% set containers = namespace(items=[]) %}
+{% set containers = namespace(items=[], config_mounts=[]) %}
 {% for d in kea_dhcp__daemons %}
 {%   set mounts = namespace(items=[
         {'name': 'config', 'mountPath': kea_dhcp_config_dir ~ '/' ~ kea_dhcp__config_files[d], 'subPath': kea_dhcp__config_files[d], 'readOnly': true},
@@ -140,6 +140,21 @@ spec:
           'livenessProbe': {'tcpSocket': {'port': probe_port}, 'initialDelaySeconds': 15, 'periodSeconds': 20, 'failureThreshold': 6}}) %}
 {%   endif %}
 {%   set containers.items = containers.items + [ctr] %}
+{#-   Kea's config mounts, collected for sidecars (paths are unique per file). -#}
+{%   for m in mounts.items if m.name == 'config' and m.mountPath not in (containers.config_mounts | map(attribute='mountPath')) %}
+{%     set containers.config_mounts = containers.config_mounts + [m] %}
+{%   endfor %}
+{% endfor %}
+{#- A Stork agent sidecar must see Kea's config, and every file it names, at the
+    paths Kea uses. -#}
+{% set extras = namespace(items=[]) %}
+{% for c in kea_dhcp_k8s_extra_containers %}
+{%   if kea_dhcp_k8s_extra_containers_mount_config | bool %}
+{%     set own = c.volumeMounts | default([]) %}
+{%     set add = containers.config_mounts | rejectattr('mountPath', 'in', own | map(attribute='mountPath') | list) | list %}
+{%     set c = c | combine({'volumeMounts': own + add}) %}
+{%   endif %}
+{%   set extras.items = extras.items + [c] %}
 {% endfor %}
 
 {#- ---- Volumes --------------------------------------------------------- -#}
@@ -176,7 +191,7 @@ spec:
       'affinity': affinity,
       'imagePullSecrets': kea_dhcp_k8s_image_pull_secrets,
       'terminationGracePeriodSeconds': 30,
-      'containers': containers.items + kea_dhcp_k8s_extra_containers,
+      'containers': containers.items + extras.items,
       'volumes': vols + kea_dhcp_k8s_extra_volumes} %}
 {% if kea_dhcp_k8s_priority_class_name | length > 0 %}
 {%   set pod = pod | combine({'priorityClassName': kea_dhcp_k8s_priority_class_name}) %}

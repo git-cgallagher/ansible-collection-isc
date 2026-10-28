@@ -7,7 +7,9 @@ install Kea.
 The agent finds Kea by scanning processes, reads the config file named on
 Kea's command line, and talks to the HTTP control socket it defines. It
 reads Kea API credentials from that config, preferring a client whose user
-name starts with `stork`. Where Kea runs decides the mode:
+name starts with `stork`. It opens **every** client's `user-file` and
+`password-file`, not only that one, and fails to detect the daemon if any of
+them is missing. Where Kea runs decides the mode:
 
 | `stork_agent_deploy_mode` | Kea runs… | The role… |
 |---|---|---|
@@ -47,9 +49,10 @@ main ones:
 | `stork_agent_prometheus_kea_port` | `9547` | Prometheus Kea exporter |
 | `stork_agent_image` | `""` | **Required** in container and Kubernetes modes |
 | `stork_agent_container_kea_mounts` | `[/etc/kea, /var/log/kea]` | Host paths shared read-only, at the same paths Kea uses |
-| `stork_agent_k8s_volume_mounts` | `config` → `/etc/kea` | Sidecar mounts, using your Kea pod's volume names |
-| `stork_agent_k8s_address` | `$(POD_IP)` | Address advertised per pod. Prefer a stable per-pod Service name. |
+| `stork_agent_k8s_volume_mounts` | `[]` | Extra sidecar mounts, using your Kea pod's volume names. Leave empty with `kea_dhcp`, which adds its own config mounts. |
+| `stork_agent_k8s_address` | `$(POD_IP)` | Address advertised per pod. A pod IP changes on every restart, so set a stable name; with `kea_dhcp` in service mode, `kea-<host>-ha.<namespace>.svc.cluster.local`. |
 | `stork_agent_k8s_namespace` | `""` | Kea's namespace, for the token Secret |
+| `stork_agent_k8s_create_namespace` | `true` | Create that namespace if it doesn't exist yet. This role usually runs before the Kea role. |
 
 ## Dependencies
 

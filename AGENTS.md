@@ -175,6 +175,31 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - **Stork reads Kea API credentials from Kea's config**, preferring a
   `stork…` user. `user-file` + `password-file` work (verified with Kea 3.2.1).
   The agent needs Kea's group to read them.
+- **The agent opens EVERY client's credential files**, not just the
+  `stork…` client's. One missing file (for example `ha.user` absent from the
+  sidecar) means "Failed to detect Kea daemon(s) … cannot read client
+  credentials". That's why `kea_dhcp_k8s_extra_containers_mount_config`
+  copies all of Kea's config mounts into sidecars.
+- **Stork keys machines on (address, port).**
+  - Re-registering at the same address reuses the entry, even with fresh
+    agent state.
+  - A new address (`$(POD_IP)` after a pod restart) leaves a stale entry
+    that Stork keeps polling.
+  - Use a stable address: the `<instance>-ha` Service in service mode; host
+    mode is already stable.
+- **Slow registration produces duplicate-key 500s.** When the server answers
+  slowly (seen while it was still timing out against dead pods), `register`
+  retries, and the retries collide with the row the first request created:
+  `Cannot store machine … duplicate key`. The sidecar exits and the kubelet
+  restarts it. Diagnose it from the server log; the line must not be cut at
+  400 characters, because the DB error comes after the struct dump.
+- **Stork's admin password policy** (2.6 default): 12+ characters, upper and
+  lower case, a digit and a special character or space. `stork_server`
+  reports Stork's message when it refuses one. Never reuse a test password
+  that doesn't meet it.
+- **ISC's Kea images are amd64-only**, and `kea_dhcp` pins pods to
+  `kubernetes.io/arch: amd64`. On an arm64 test node, set
+  `kea_dhcp_k8s_node_selector: {}` and install binfmt emulation first.
 - **Login is `POST /api/sessions`**, not `/api/users/login`.
 - **RPM versions are `2.6.0.<build>`**, so pin with globs.
 - **AL2023:** use the EL9 repo, and install `shadow-utils` in an earlier
@@ -187,8 +212,12 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## TODO / follow-ups
 
-- Run a live Kubernetes test of the Stork sidecar inside a `kea_dhcp` pod, now
-  that `kea_dhcp_k8s_share_process_namespace` exists.
+- Automate the Stork sidecar live test, which was done by hand in 1.4.0 (see
+  `docs/testing.md`). It needs a k3s or kind job with amd64 Kea images, so an
+  amd64 CI runner.
+- Test the sidecar with Kea in host network mode and with Kea 3.2.
+- Stable agent address for service mode **without** HA: there is no per-peer
+  Service to reuse.
 - Run the Stork agent's container mode end to end on a real VM. Nested podman
   can't exec on the dev Mac.
 - Publish the Stork images (GHCR) so container and Kubernetes users don't have

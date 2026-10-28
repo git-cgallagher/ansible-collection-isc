@@ -35,7 +35,7 @@ main ones:
 | `stork_server_db_host` / `_port` / `_name` / `_user` | `localhost` / `5432` / `stork` / `stork` | Database |
 | `stork_server_db_password` | `""` | **Required.** Vault it. |
 | `stork_server_db_sslmode` | `disable` locally, else `require` | |
-| `stork_server_admin_password` | `""` | When set, replaces the `admin`/`admin` bootstrap password |
+| `stork_server_admin_password` | `""` | When set, replaces the `admin`/`admin` bootstrap password. Stork's default policy needs 12+ characters with upper and lower case letters, a digit and a special character or space. A refused password fails the run with Stork's reason. |
 | `stork_server_k8s_image` | `""` | **Required** in Kubernetes mode |
 | `stork_server_k8s_namespace` | `stork` | Created unless `stork_server_k8s_create_namespace: false` |
 | `stork_server_k8s_service_type` | `ClusterIP` | |

@@ -27,6 +27,19 @@
         body: { oldpassword: "{{ stork_server_admin_bootstrap_password }}", newpassword: "{{ stork_server_admin_password }}" }
         headers: { Cookie: "{{ _stork_server_boot_login.cookies_string }}" }
         validate_certs: false
+        # 400 = the password policy refused it; reported by the next task.
+        status_code: [200, 400]
+      register: _stork_server_set_password
       when: _stork_server_boot_login.status == 200
-      changed_when: true
+      changed_when: _stork_server_set_password.status == 200
       no_log: true
+
+    # Stork's message names the unmet rules and never contains the password.
+    # The default policy: 12+ characters, upper and lower case, a digit, and a
+    # special character or space.
+    - name: Report a refused admin password
+      ansible.builtin.fail:
+        msg: "Stork refused stork_server_admin_password: {{ _stork_server_set_password.json.message | default('HTTP 400') }}"
+      when:
+        - _stork_server_set_password is not skipped
+        - _stork_server_set_password.status == 400

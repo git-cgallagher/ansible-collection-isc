@@ -19,3 +19,13 @@ spec:
       port: {{ kea_dhcp_ha_ports[fam] if kea_dhcp__ha_dedicated_listener | bool else kea_dhcp_api_ports[fam] }}
       targetPort: {{ kea_dhcp_ha_ports[fam] if kea_dhcp__ha_dedicated_listener | bool else kea_dhcp_api_ports[fam] }}
 {% endfor %}
+{#- Sidecar ports (e.g. the Stork agent's): this Service then doubles as the
+    sidecar's stable address, which a pod IP is not. -#}
+{% for c in kea_dhcp_k8s_extra_containers %}
+{%   for p in c.ports | default([]) if (p.protocol | default('TCP')) == 'TCP' %}
+    - name: {{ p.name | default(c.name ~ '-' ~ p.containerPort) }}
+      protocol: TCP
+      port: {{ p.containerPort }}
+      targetPort: {{ p.containerPort }}
+{%   endfor %}
+{% endfor %}
