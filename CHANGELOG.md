@@ -4,9 +4,10 @@
 
 Stork on Amazon Linux 2023, including next to Kea in containers.
 
-- **`stork_server`**: fixed the local PostgreSQL on RPM hosts (RHEL, Rocky,
-  Amazon Linux 2023). The server never started: "Ident authentication failed
-  for user stork". It dials `localhost` as `::1` when `/etc/hosts` lists it,
+- **`stork_server`**: fixed the local PostgreSQL on RPM hosts. On Amazon
+  Linux 2023 the server never started: "Ident authentication failed for user
+  stork". RHEL and Rocky have the same `::1 localhost` entry and the same
+  stock `pg_hba.conf`, so they're likely affected too (unconfirmed). It dials `localhost` as `::1` when `/etc/hosts` lists it,
   and the role had only allowed password auth on `127.0.0.1`. Both loopback
   addresses are allowed now. CI hadn't caught it because the Molecule server
   ran on Ubuntu.

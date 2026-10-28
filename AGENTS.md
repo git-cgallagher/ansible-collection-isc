@@ -167,7 +167,8 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - **RPM PostgreSQL: allow `::1` as well as `127.0.0.1`.** The server's Go
   resolver dials `localhost` as `::1` when `/etc/hosts` has that entry, and
   the stock `pg_hba.conf` answers `::1` with `ident`. Only `127.0.0.1` was
-  allowed until 1.4.1, so the server never started on RHEL, Rocky or AL2023.
+  allowed until 1.4.1, so the server never started on AL2023 (seen there; EL
+  hosts have the same `::1 localhost` entry, unconfirmed).
   The Molecule server ran on Ubuntu and hid it; `stork_container` puts it on
   AL2023.
 - **Amazon Linux 2023 has no podman**, only Docker (`dnf install docker`).
