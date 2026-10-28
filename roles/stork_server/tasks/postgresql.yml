@@ -20,11 +20,15 @@
   changed_when: "'already' not in _stork_server_pg_init.stdout"
   when: stork_repository_pkg_format in ['rpm', 'apk']
 
+# Both loopback addresses: the server's Go resolver dials "localhost" as ::1
+# when /etc/hosts lists it, which otherwise matches the stock "::1/128 ident"
+# line (seen on Amazon Linux 2023).
 - name: Allow password auth for the Stork user over loopback (RPM default is ident)
   ansible.builtin.lineinfile:
     path: /var/lib/pgsql/data/pg_hba.conf
     insertbefore: BOF
-    line: "host {{ stork_server_db_name }} {{ stork_server_db_user }} 127.0.0.1/32 scram-sha-256"
+    line: "host {{ stork_server_db_name }} {{ stork_server_db_user }} {{ item }} scram-sha-256"
+  loop: [127.0.0.1/32, "::1/128"]
   when: stork_repository_pkg_format == 'rpm'
   register: _stork_server_pg_hba
 

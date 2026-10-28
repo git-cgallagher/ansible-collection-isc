@@ -1,0 +1,84 @@
+---
+# Stork on Amazon Linux 2023, with Kea in containers:
+#   stork  - AL2023: stork_server from packages + a local PostgreSQL 16
+#   kea-ct - AL2023 with systemd + its own Docker engine (AL2023 has no podman):
+#            kea_dhcp in container mode (ISC's Kea 3.0 image) and
+#            stork_agent in container mode next to it
+# The agent image is built on kea-ct in prepare.yml (ISC publishes none).
+dependency:
+  name: galaxy
+  options:
+    requirements-file: requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: stork
+    image: geerlingguy/docker-amazonlinux2023-ansible:latest
+    command: ""
+    pre_build_image: true
+    privileged: true
+    cgroupns_mode: host
+    volumes: ["/sys/fs/cgroup:/sys/fs/cgroup:rw"]
+    tmpfs: ["/run", "/tmp"]
+    networks: [{ name: stork-ct-molecule, ipv4_address: 172.30.21.20 }]
+    published_ports: ["127.0.0.1:18091:8080/tcp"]
+    docker_networks:
+      - name: stork-ct-molecule
+        ipam_config: [{ subnet: 172.30.21.0/24, gateway: 172.30.21.1 }]
+    groups: [stork_server]
+  - name: kea-ct
+    image: stork-ct-kea-node
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: true
+    cgroupns_mode: host
+    command: /usr/lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /var/lib/docker
+    tmpfs: ["/run", "/tmp"]
+    networks: [{ name: stork-ct-molecule, ipv4_address: 172.30.21.11 }]
+    groups: [kea]
+provisioner:
+  name: ansible
+  env:
+    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections
+  inventory:
+    group_vars:
+      all:
+        test_admin_password: molecule-Admin-pw-1
+        # The docker connection is already root. Skipping sudo avoids the
+        # amd64 AL2023 image's "PAM account management error" on GitHub runners.
+        ansible_become: false
+      stork_server:
+        stork_server_version: "2.6.0"
+        stork_server_db_password: molecule-db-pw
+        stork_server_admin_password: "{{ test_admin_password }}"
+      kea:
+        # kea_dhcp, container mode
+        kea_dhcp_deployment: container
+        kea_dhcp_container_platform: linux/amd64   # ISC images are amd64-only
+        kea_dhcp_interfaces: [eth0]
+        kea_dhcp_api_http_enabled: true
+        # The agent opens every client's credential files and prefers "stork…".
+        kea_dhcp_api_auth_clients:
+          - { user: admin, password: molecule-only }
+          - { user: stork, password: molecule-only }
+        kea_dhcp_dhcp4_settings:
+          subnet4:
+            - id: 1
+              subnet: 192.0.2.0/24
+              pools: [{ pool: 192.0.2.100 - 192.0.2.200 }]
+        # stork_agent, container mode
+        stork_agent_deploy_mode: container
+        stork_agent_image: localhost/stork-agent:molecule
+        stork_agent_container_pull: false          # built in prepare.yml
+        stork_agent_address: 172.30.21.11
+        stork_agent_server_url: http://172.30.21.20:8080
+        stork_agent_api_url: http://127.0.0.1:18091   # controller -> published port
+        stork_agent_api_password: "{{ test_admin_password }}"
+verifier:
+  name: ansible
+scenario:
+  test_sequence: [dependency, destroy, create, prepare, converge, idempotence, verify, destroy]

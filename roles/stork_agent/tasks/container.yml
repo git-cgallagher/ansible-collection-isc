@@ -49,6 +49,26 @@
     mode: "0750"
   loop: [/etc/stork, /var/lib/stork-agent]
 
+# Podman refuses a bind mount whose source is missing (Docker creates it). Kea
+# logging to stdout, for example, leaves no /var/log/kea. Existing paths are
+# left exactly as they are.
+- name: Check the shared Kea paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ stork_agent_container_kea_mounts }}"
+  register: _stork_agent_kea_mounts_stat
+
+- name: Create missing shared Kea paths as empty directories
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ _stork_agent_kea_mounts_stat.results | rejectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 - name: Write agent.env
   ansible.builtin.template:
     src: agent.env.j2

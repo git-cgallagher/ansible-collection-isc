@@ -1,0 +1,13 @@
+---
+# Server first: the agent reads the server token from its API.
+- name: Stork server
+  hosts: stork_server
+  roles: [git_cgallagher.isc.stork_server]
+
+# Kea before the agent: the agent runs next to an existing Kea.
+- name: Kea in containers, then the Stork agent next to it
+  hosts: kea
+  gather_facts: true
+  roles:
+    - git_cgallagher.isc.kea_dhcp
+    - git_cgallagher.isc.stork_agent

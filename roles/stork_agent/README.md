@@ -19,7 +19,20 @@ them is missing. Where Kea runs decides the mode:
 
 The container and Kubernetes modes need the agent image to contain the Kea
 binaries: the agent identifies a daemon by running `kea-dhcp4 -v` from its
-own filesystem. `docker/Dockerfile.stork-agent` builds such an image.
+own filesystem. `docker/Dockerfile.stork-agent` builds such an image. Build
+it with `KEA_VERSION` equal to the Kea image's version: 3.0.4 is
+`kea_dhcp`'s default.
+
+**Next to `kea_dhcp`'s container mode:**
+- Kea's containers mount `kea_dhcp_config_dir` (default `/etc/kea`, which
+  holds the API credentials) and the directory of each `kea_dhcp_files`
+  entry. The agent needs the same paths in `stork_agent_container_kea_mounts`.
+  The default, `[/etc/kea, /var/log/kea]`, covers the defaults.
+- Missing paths are created as empty directories, because podman refuses a
+  missing mount source.
+- On Amazon Linux 2023 the runtime is Docker, which is the only runtime
+  there; install it first. This pairing is tested by the `stork_container`
+  Molecule scenario.
 
 ## Requirements
 
