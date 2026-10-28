@@ -1,6 +1,5 @@
 ---
 galaxy_info:
-  namespace: git-cgallagher  # Galaxy's importer uses this verbatim as the legacy namespace
   role_name: kea_dhcp
   author: Chris Gallagher
   description: >-

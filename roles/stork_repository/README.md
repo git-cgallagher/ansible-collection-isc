@@ -1,4 +1,4 @@
-# git_cgallagher.stork.stork_repository
+# git_cgallagher.isc.stork_repository
 
 Configures ISC's Cloudsmith package repository for Stork on Debian/Ubuntu
 (apt), the RHEL family, Fedora and Amazon Linux 2023 (dnf/yum), and Alpine
@@ -31,7 +31,7 @@ None.
 - hosts: all
   become: true
   roles:
-    - role: git_cgallagher.stork.stork_repository
+    - role: git_cgallagher.isc.stork_repository
       vars:
         stork_repository_name: stork
 ```

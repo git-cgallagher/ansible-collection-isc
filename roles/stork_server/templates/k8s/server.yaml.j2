@@ -1,11 +1,11 @@
-{%- set labels = {'app.kubernetes.io/name': 'stork-server', 'app.kubernetes.io/managed-by': 'git_cgallagher.stork'} -%}
+{%- set labels = {'app.kubernetes.io/name': 'stork-server', 'app.kubernetes.io/managed-by': 'git_cgallagher.isc'} -%}
 {% if stork_server_k8s_create_namespace | bool %}
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ stork_server_k8s_namespace }}
-  labels: {{ {'app.kubernetes.io/managed-by': 'git_cgallagher.stork'} | to_json }}
+  labels: {{ {'app.kubernetes.io/managed-by': 'git_cgallagher.isc'} | to_json }}
 {% endif %}
 ---
 apiVersion: v1

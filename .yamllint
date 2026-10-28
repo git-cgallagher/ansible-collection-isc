@@ -3,6 +3,9 @@ extends: default
 ignore: |
   collections/
   .molecule-collections/
+  .ansible/
+  .cache/
+  tests/kea_dhcp/output/
 rules:
   line-length: { max: 160, level: warning }
   truthy: { allowed-values: ["true", "false"], check-keys: false }
@@ -11,4 +14,4 @@ rules:
   braces: { max-spaces-inside: 1 }
   brackets: { max-spaces-inside: 1 }
   document-start: disable
-  octal-values: { forbid-implicit-octal: true }
+  octal-values: { forbid-implicit-octal: true, forbid-explicit-octal: true }

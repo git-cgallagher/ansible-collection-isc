@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
 """Validate rendered Kea configs inside the real ISC images.
 
-For every manifest in tests/output/**.yaml: take the Secret's payload, lay it
+For every manifest in tests/kea_dhcp/output/**.yaml: take the Secret's payload, lay it
 out exactly as the Deployment/DaemonSet mounts it, and run each container's
 binary with `-t` (config check, which also loads and validates hook libraries)
 in the container image the role chose. Needs docker and PyYAML.
 
-usage: tests/validate.py [tests/output]
+usage: python3 tests/kea_dhcp/validate.py [tests/kea_dhcp/output]
 """
 import pathlib
 import subprocess
@@ -36,7 +35,7 @@ for manifest in sorted(out.rglob("*.yaml")):
             binary, _, conf = ctr["command"]
             cmd = ["docker", "run", "--rm", "--platform", "linux/amd64", *args,
                    ctr["image"], binary, "-t", conf]
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            res = subprocess.run(cmd, capture_output=True, text=True, check=False)  # return code inspected below
             checks += 1
             label = f"{manifest.parent.name}/{manifest.stem} {ctr['name']} ({ctr['image'].rsplit(':', 1)[1]})"
             if res.returncode == 0:

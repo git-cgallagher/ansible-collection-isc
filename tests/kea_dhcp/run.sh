@@ -22,6 +22,14 @@ PY
   rm -rf "$tmp"
 fi
 
+# Expose this checkout as git_cgallagher.isc for the run (a committed
+# directory symlink would fail ansible-test's symlinks check).
+coll=$(mktemp -d)
+trap 'rm -rf "$coll"' EXIT
+mkdir -p "$coll/ansible_collections/git_cgallagher"
+ln -s "$(cd ../.. && pwd)" "$coll/ansible_collections/git_cgallagher/isc"
+export ANSIBLE_COLLECTIONS_PATH="$coll:${ANSIBLE_COLLECTIONS_PATH:-$HOME/.ansible/collections}"
+
 rm -rf output
 (cd render && ansible-playbook -i inventory.yml playbook.yml)
 python3 validate.py output

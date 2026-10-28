@@ -52,7 +52,7 @@
       metadata:
         name: "{{ stork_agent_k8s_secret_name }}"
         namespace: "{{ stork_agent_k8s_namespace }}"
-        labels: { app.kubernetes.io/managed-by: git_cgallagher.stork }
+        labels: { app.kubernetes.io/managed-by: git_cgallagher.isc }
       stringData:
         STORK_AGENT_SERVER_TOKEN: "{{ _stork_agent_token }}"
   delegate_to: localhost

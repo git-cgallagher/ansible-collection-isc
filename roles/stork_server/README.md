@@ -1,4 +1,4 @@
-# git_cgallagher.stork.stork_server
+# git_cgallagher.isc.stork_server
 
 Installs and configures the [ISC Stork](https://stork.readthedocs.io/)
 server, either on a host from ISC's packages or in Kubernetes as a
@@ -44,7 +44,7 @@ main ones:
 
 ## Dependencies
 
-`git_cgallagher.stork.stork_repository`, included automatically in package
+`git_cgallagher.isc.stork_repository`, included automatically in package
 mode.
 
 ## Example Playbook
@@ -53,7 +53,7 @@ mode.
 - hosts: stork_server
   become: true
   roles:
-    - role: git_cgallagher.stork.stork_server
+    - role: git_cgallagher.isc.stork_server
       vars:
         stork_server_version: "2.6.0"
         stork_server_db_password: "{{ vault_stork_db_password }}"

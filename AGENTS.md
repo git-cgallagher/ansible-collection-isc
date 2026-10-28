@@ -1,26 +1,45 @@
-# AGENTS.md — ansible-collection-stork
+# AGENTS.md — ansible-collection-isc
 
-Ansible collection **`git_cgallagher.stork`**: ISC Stork server + agent.
-**Kea is out of scope.** The collection pairs with any Kea role; the usual
-companion is `~/Code/ansible-role-kea-dhcp` (`kea_dhcp`). Read
-`README.md`, then `docs/research.md`, which holds the verified facts the
-design rests on.
+Ansible collection **`git_cgallagher.isc`** (MIT) for ISC network services. It
+holds the Kea role `kea_dhcp` and the Stork roles `stork_server`, `stork_agent`
+and `stork_repository`. Public repo `git-cgallagher/ansible-collection-isc`,
+published to Galaxy as `git_cgallagher.isc`.
 
-Published on Galaxy as `git_cgallagher.stork`. The GitHub repo
-`git-cgallagher/ansible-collection-stork` is public, with secret scanning and
-push protection.
+It **replaces**, with their full git history:
+- the standalone role `git-cgallagher.kea_dhcp` (repo `ansible-role-kea-dhcp`);
+- the collection `git_cgallagher.stork` (repo `ansible-collection-stork`).
 
-## Commands
+Both are retired. Work on branches and PRs; `main` is protected.
+
+## Layout
+
+```
+roles/kea_dhcp/          Kea DHCP (packages or Kubernetes); its README is the user guide
+roles/stork_*            Stork server, agent, package repository
+docker/                  Stork image Dockerfiles (ISC publishes none)
+examples/kea_dhcp/       ready-to-adapt Kea inventories
+molecule/kea_dhcp/       Kea package installs on 5 distros (no init: configs validated, services not started)
+molecule/stork/          Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
+tests/kea_dhcp/          render 8 Kea deployment shapes + `kea -t` in ISC 2.6/3.0/3.2 images
+docs/                    stork-research, stork-kubernetes, testing, kea_dhcp-changelog-standalone
+```
+
+## Checks (all must pass before a change is done)
 
 ```bash
 ansible-galaxy collection install -r requirements.yml -p ./collections
-mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/stork
-molecule test                     # Stork server + agents next to Kea 3.0 and 3.2 (basic auth)
-ansible-lint && yamllint .        # production profile, must stay at 0
+mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+ansible-lint && yamllint .          # production profile, must stay at 0
+tests/kea_dhcp/run.sh               # Kea render + kea -t (Docker; amd64 images)
+molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
+molecule test -s stork
 ```
 
-Sanity runs from an `ansible_collections/git_cgallagher/stork` checkout:
-`ansible-test sanity --venv`.
+Sanity needs an `ansible_collections/git_cgallagher/isc` checkout:
+`ansible-test sanity --venv`. The tests reach the roles as `git_cgallagher.isc.*`
+through a collections path created at run time. Never commit a directory
+symlink: ansible-test's `symlinks` check rejects it, and the old
+`tests/render/roles/kea_dhcp -> ../../..` link made ansible-lint recurse.
 
 ## Releasing (automated: every merge to main is released)
 
@@ -32,7 +51,8 @@ Sanity runs from an `ansible_collections/git_cgallagher/stork` checkout:
 2. Merge. When `ansible-test` goes green on `main`, **`release.yml`**:
    - builds the collection;
    - publishes it to Galaxy if that version isn't there (secret
-     `GALAXY_API_KEY`);
+     `GALAXY_API_KEY` in the `galaxy` environment, which only `main` can
+     deploy to);
    - creates the `v<version>` tag and GitHub release (tarball plus the
      CHANGELOG section) if they're missing.
 3. `release.yml` is idempotent. It also runs **weekly** (Tue 14:00 UTC) and
@@ -44,34 +64,80 @@ as a new version. Never push shipped-file changes straight to `main`
 without a bump: the release job would see the version already published and
 skip it, leaving Galaxy behind `main`.
 
-`GALAXY_API_KEY` is a repo Actions secret that Chris sets. Agents never read
-or set it.
+`GALAXY_API_KEY` is an environment secret (Settings → Environments → `galaxy`)
+that Chris sets. Agents never read or set it.
 
 The manual fallback, from a clean checkout of the tag, uses
 `~/.ansible/galaxy_token`:
 
 ```bash
-ansible-galaxy collection build --force && ansible-galaxy collection publish git_cgallagher-stork-<version>.tar.gz
+ansible-galaxy collection build --force && ansible-galaxy collection publish git_cgallagher-isc-<version>.tar.gz
 ```
 
-1.0.0 was published this way on 2026-10-27, from commit `680bc20`.
+git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## Conventions
 
-- Role variables are prefixed with their role name (`stork_server_*`,
-  `stork_agent_*`, `stork_repository_*`). Internal facts and registers start
-  with `_<role>_`.
-- Roles reference each other by FQCN (`git_cgallagher.stork.stork_repository`).
-- Booleans are always read with `| bool`.
+- Role variables are prefixed with the role name (`kea_dhcp_`, `stork_server_`,
+  `stork_agent_`, `stork_repository_`). Internal names: `kea_dhcp__*` and
+  `_stork_<role>_*`.
+- Roles reference each other by FQCN (`git_cgallagher.isc.<role>`).
+- Booleans are read with `| bool`.
 - READMEs follow Ansible conventions:
-  - The collection README uses the collection-template sections (Description,
-    Tested with, External requirements, Included content, Using this
-    collection, Release notes, More information, Licensing).
-  - Each role README uses the `ansible-galaxy role init` sections
-    (Requirements, Role Variables, Dependencies, Example Playbook, License,
-    Author Information).
+  - the collection README uses the collection-template sections;
+  - each role README uses the `ansible-galaxy role init` sections.
+- Never commit a real secret (workspace rule). Fixtures use obvious
+  placeholders, and `tests/kea_dhcp/render/tls.json` (generated test PKI) is
+  gitignored.
+
+### kea_dhcp
+
+- Every variable is prefixed `kea_dhcp_` (public) or `kea_dhcp__` (internal); loop vars too.
+- Never assume the network: no default interfaces or subnets — assert instead.
+- Kea keys are passed through hyphenated, never renamed into role variables.
+- Jinja `set` inside a `for` loop does not escape the loop — accumulate with `namespace()`.
+- k8s templates rely on `trim_blocks`; keep a blank line before every `---` that follows a
+  `{% endif %}` or the YAML documents run together.
 
 ## ⚠️ Gotchas (each one was hit during development)
+
+### kea_dhcp
+
+- Kea 3.x **and 2.6.3+** reject unix sockets outside `/var/run/kea` — the literal string
+  `/run/kea` fails `kea-ctrl-agent -t` even though it is the same directory.
+- ISC images: binaries are `kea:kea 0754`, the container runs as root → dropping ALL caps
+  breaks exec. Keep `DAC_OVERRIDE`. Images are linux/amd64 only.
+- apk trusts a repo key only if the file name matches the signer
+  (`kea-3-0@isc-F10F3BFBD3D43C83.rsa.pub`). New series → add its ID to
+  `kea_dhcp_isc_repo_alpine_key_ids` (read it from the repo's `setup.alpine.sh`).
+- `deb822_repository` needs `python3-debian` on the target; the role uses `apt_repository`
+  with an armored `.asc` keyring instead.
+- HA in Kubernetes service mode: Kea needs IPs in peer URLs and binds its own URL, so a peer
+  renders itself as `0.0.0.0` and its partner as the partner's ClusterIP (verified live in
+  Docker: both peers reach HOT-STANDBY).
+
+- ISC EL RPMs need `log4cplus` from EPEL — without it dnf depsolve fails (caught by Molecule
+  on Rocky 9). The role installs `epel-release` unless `kea_dhcp_epel_manage: false`.
+- A peer's partner URL must be an IP. A `--limit` run once rendered `http://th2:8001/` because
+  the partner wasn't in the play; addresses now resolve centrally
+  (`templates/config/ha_peer_addresses.json.j2`) and the build asserts they are IPs.
+- Kea 3.2 rejects an HTTP API with neither TLS nor auth, and a clear-text `user` — always use
+  `user-file` + `password-file` (fine on 2.6/3.0/3.2). `-t` catches this; the role asserts first.
+- Non-MT HA: server `multi-threading` must also be off (else HA sticks in WAITING), and peers
+  need `basic-auth-*` when the API has auth (else `Unauthorized`). Both verified live on 2.6.5.
+- 2.6 in k8s: shared `/var/run/kea` emptyDir survives container restarts → stale "PID 1" file →
+  `DHCP4_ALREADY_RUNNING`. Pods set `KEA_PIDFILE_DIR=/tmp`.
+- Docker Desktop on Apple silicon can silently lose its amd64 emulator (every amd64 image then
+  fails with `exec format error`, which makes all `kea -t` checks fail at once). Re-register it
+  with `docker run --privileged --rm tonistiigi/binfmt --install amd64` (resets on Docker restart).
+- Molecule on Apple silicon: a locally cached arm64 tag (e.g. `alpine:3.22`) blocks creating the
+  amd64 container — `docker pull --platform linux/amd64 <image>` first.
+
+- Galaxy's role importer takes `galaxy_info.namespace` **verbatim** as the legacy namespace
+  (`overriding namespace name via metadata`). It must be exactly `git-cgallagher`; `cgallagher`
+  and `git_cgallagher` fail with "legacy namespace … does not exist". Lint accepts the hyphen.
+
+### Stork roles
 
 - **The agent runs next to Kea and identifies it by running `kea-dhcp4 -v`
   from its own filesystem.** In container and Kubernetes modes its image must
@@ -96,13 +162,13 @@ ansible-galaxy collection build --force && ansible-galaxy collection publish git
 
 ## TODO / follow-ups
 
-- `kea_dhcp` needs a `shareProcessNamespace` switch before the sidecar works
-  in its pods (docs/kubernetes.md). Then add a live k8s integration test
-  against it.
-- Run container mode end to end on a real VM; nested podman can't exec on the
-  dev Mac.
-- Publish the multi-arch images (GHCR) so container and Kubernetes users don't
-  have to build them.
-- The Kea findings from the old all-in-one role (AL2023 log4cplus, Kea binary
-  caps/permissions, socket-dir rules, HA in Kubernetes) belong in `kea_dhcp`.
-  They are in this repo's git history, commit `c427689`.
+- Run a live Kubernetes test of the Stork sidecar inside a `kea_dhcp` pod, now
+  that `kea_dhcp_k8s_share_process_namespace` exists.
+- Run the Stork agent's container mode end to end on a real VM. Nested podman
+  can't exec on the dev Mac.
+- Publish the Stork images (GHCR) so container and Kubernetes users don't have
+  to build them.
+- `kea-admin` schema management is untested against a live MySQL/PostgreSQL.
+- Molecule cannot start services (no init in containers); service start is untested in CI.
+- Possible additions: BIND 9 (Stork already monitors it); reuse
+  `stork_repository` for Kea's Cloudsmith repos.

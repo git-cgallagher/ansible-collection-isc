@@ -19,4 +19,4 @@
   tasks:
     - name: Apply the role from this checkout
       ansible.builtin.include_role:
-        name: "{{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+        name: git_cgallagher.isc.kea_dhcp

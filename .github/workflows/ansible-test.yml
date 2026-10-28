@@ -4,22 +4,28 @@ on:
   push:
     branches: [main]
   pull_request:
+  # ISC and the distros ship new builds without notice; a weekly run catches
+  # repo/package/image changes before someone deploys against them.
   schedule:
-    - cron: '0 13 * * 2'   # weekly, catches ISC package and ansible-core drift
+    - cron: '0 13 * * 2'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  PY_COLORS: '1'
+  ANSIBLE_FORCE_COLOR: '1'
+
 jobs:
   # Every merge to main is released (release.yml), so a PR that changes
-  # anything shipped in the collection must bump galaxy.yml's version and
-  # add a CHANGELOG entry. Galaxy versions can't be re-uploaded.
+  # anything shipped in the collection must bump galaxy.yml's version and add
+  # a CHANGELOG entry. Galaxy versions can't be re-uploaded.
   version-bump:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -27,7 +33,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          # Paths that are NOT in the tarball (galaxy.yml build_ignore + tests).
+          # Paths that are NOT in the tarball (galaxy.yml build_ignore).
           ignore='^(\.github/|molecule/|tests/|AGENTS\.md$|\.ansible-lint$|\.yamllint$|\.gitignore$)'
           shipped=$(git diff --name-only "$BASE"...HEAD | grep -Ev "$ignore" || true)
           if [ -z "$shipped" ]; then echo "No shipped files changed; no release needed."; exit 0; fi
@@ -49,13 +55,14 @@ jobs:
   sanity:
     name: sanity (${{ matrix.ansible-core-version }})
     runs-on: ubuntu-latest
+    # devel is an early warning, never a merge gate.
     continue-on-error: ${{ matrix.ansible-core-version == 'devel' }}
     strategy:
       fail-fast: false
       matrix:
         ansible-core-version: [stable-2.18, stable-2.19, stable-2.20, stable-2.21, devel]
     steps:
-      - uses: ansible-community/ansible-test-gh-action@release/v1
+      - uses: ansible-community/ansible-test-gh-action@6ded727edb598e670ac056a8e680ca4050bac0a3  # v1.18.0
         with:
           ansible-core-version: ${{ matrix.ansible-core-version }}
           testing-type: sanity
@@ -63,31 +70,71 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: '3.13'
-      - run: pip install ansible-lint yamllint
+      - run: |
+          pip install ansible-core ansible-lint yamllint
+          ansible-galaxy collection install -r requirements.yml
       - run: yamllint .
       - run: ansible-lint
 
-  molecule:
+  kea-render:
+    # Renders 8 Kea deployment shapes without a cluster and checks every
+    # config with `kea-<daemon> -t` in the ISC 2.6 / 3.0 / 3.2 images.
+    name: kea_dhcp render + kea -t
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          pip install ansible-core pyyaml kubernetes
+          ansible-galaxy collection install -r requirements.yml
+      - run: tests/kea_dhcp/run.sh
+
+  molecule-kea:
+    name: molecule kea_dhcp (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [kea-debian12, kea-ubuntu2404, kea-rocky9, kea-alpine-isc, kea-alpine-distro]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.13'
+      - run: |
+          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          ansible-galaxy collection install -r requirements.yml community.docker
+      - name: Expose the checkout as git_cgallagher.isc
+        run: |
+          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
+          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+      - run: molecule test -s kea_dhcp --platform-name ${{ matrix.platform }}
+
+  molecule-stork:
+    name: molecule stork
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: '3.13'
       - run: pip install "ansible-core>=2.18,<2.22" molecule "molecule-plugins[docker]"
-      - name: Expose the checkout as git_cgallagher.stork
+      - name: Expose the checkout as git_cgallagher.isc
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/stork
-      - run: molecule test
-        env:
-          PY_COLORS: '1'
-          ANSIBLE_FORCE_COLOR: '1'
+          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+      - run: molecule test -s stork

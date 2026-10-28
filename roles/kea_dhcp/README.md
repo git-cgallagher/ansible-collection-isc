@@ -1,7 +1,8 @@
-# Ansible Role: Kea DHCP
+# git_cgallagher.isc.kea_dhcp
 
-[![CI](https://github.com/git-cgallagher/ansible-role-kea-dhcp/actions/workflows/ci.yml/badge.svg)](https://github.com/git-cgallagher/ansible-role-kea-dhcp/actions/workflows/ci.yml)
-[![Ansible Galaxy](https://img.shields.io/badge/galaxy-git--cgallagher.kea__dhcp-blue.svg)](https://galaxy.ansible.com/ui/standalone/roles/git-cgallagher/kea_dhcp/)
+Part of the [`git_cgallagher.isc`](../../README.md) collection. This role
+was previously the standalone Galaxy role `git-cgallagher.kea_dhcp`; see
+[Migrating from the standalone role](#migrating-from-the-standalone-role).
 
 Installs and configures [ISC Kea](https://www.isc.org/kea/) DHCPv4, DHCPv6 and DDNS, in one of two ways:
 
@@ -19,7 +20,7 @@ Both paths build the Kea configuration the same way. The role computes the parts
 ## Requirements
 
 - ansible-core ≥ 2.16
-- Collections (`ansible-galaxy collection install -r requirements.yml`):
+- Collections (installed with this one; see [Installation](#installation)):
   - `community.general`: for `apk` on Alpine.
   - `kubernetes.core`: for Kubernetes mode, plus the `kubernetes` Python package on the controller.
 - Package mode needs Python on the target. On minimal images, set `kea_dhcp_bootstrap_python: true` and `gather_facts: false`. RHEL-family hosts need `dnf`; `-minimal` images ship only `microdnf`, and the bootstrap installs `dnf` for you.
@@ -36,31 +37,31 @@ CI tests package installs on Debian 12, Ubuntu 24.04, Rocky 9 and Alpine 3.20/3.
 
 ## Installation
 
-From Ansible Galaxy:
+This role ships in the `git_cgallagher.isc` collection:
 
 ```bash
-ansible-galaxy role install git-cgallagher.kea_dhcp
-ansible-galaxy collection install community.general kubernetes.core
+ansible-galaxy collection install git_cgallagher.isc community.general kubernetes.core
 ```
 
 Or in a `requirements.yml`:
 
 ```yaml
-roles:
-  - name: git-cgallagher.kea_dhcp
 collections:
+  - name: git_cgallagher.isc
   - name: community.general
   - name: kubernetes.core   # Kubernetes deployments only
 ```
 
-Or straight from Git, pinned to a commit or tag:
+### Migrating from the standalone role
+
+The standalone role `git-cgallagher.kea_dhcp` is retired. Variables and
+behaviour are unchanged; only the name moves:
 
 ```yaml
-roles:
-  - name: kea_dhcp
-    src: https://github.com/git-cgallagher/ansible-role-kea-dhcp.git
-    scm: git
-    version: main
+# before
+- role: git-cgallagher.kea_dhcp
+# after
+- role: git_cgallagher.isc.kea_dhcp
 ```
 
 ## Role Variables
@@ -68,7 +69,7 @@ roles:
 Every variable is listed with its type, choices and a description in [`meta/argument_specs.yml`](meta/argument_specs.yml), which Ansible enforces when the role starts. Defaults, with comments, are in [`defaults/main.yml`](defaults/main.yml). To read the spec from the command line:
 
 ```bash
-ansible-doc -t role -r ~/.ansible/roles git-cgallagher.kea_dhcp
+ansible-doc -t role git_cgallagher.isc.kea_dhcp
 ```
 
 All variables are prefixed `kea_dhcp_`. The ones you will touch most:
@@ -97,7 +98,7 @@ No role dependencies. Collections are listed under [Requirements](#requirements)
 - hosts: dhcp
   become: true
   roles:
-    - role: git-cgallagher.kea_dhcp
+    - role: git_cgallagher.isc.kea_dhcp
       vars:
         kea_dhcp_interfaces: [eth0]
         kea_dhcp_dhcp4_settings:
@@ -108,11 +109,12 @@ No role dependencies. Collections are listed under [Requirements](#requirements)
               option-data: [{name: routers, data: 192.0.2.1}]
 ```
 
-The role makes no default assumptions about the network. It **fails** if no interface is set and adds no subnets of its own. Ready-to-adapt inventories are in [`examples/`](examples/). They refer to the role as `kea_dhcp`. To install it under that name, use a `requirements.yml` entry with `src: git-cgallagher.kea_dhcp` and `name: kea_dhcp`, or symlink a checkout (`ln -s "$PWD" ~/.ansible/roles/kea_dhcp`):
+The role makes no default assumptions about the network. It **fails** if no interface is set and adds no subnets of its own. Ready-to-adapt inventories are in the collection's
+[`examples/kea_dhcp/`](../../examples/kea_dhcp/):
 
-- [`package-ha`](examples/package-ha/): HA pair on VMs or bare metal.
-- [`talos-ha`](examples/talos-ha/): HA pair on Talos with host networking.
-- [`eks-relay`](examples/eks-relay/): relayed DHCP on EKS with an RDS lease database.
+- [`package-ha`](../../examples/kea_dhcp/package-ha/): HA pair on VMs or bare metal.
+- [`talos-ha`](../../examples/kea_dhcp/talos-ha/): HA pair on Talos with host networking.
+- [`eks-relay`](../../examples/kea_dhcp/eks-relay/): relayed DHCP on EKS with an RDS lease database.
 
 ## How the configuration is built
 
@@ -204,6 +206,14 @@ A config checksum annotation rolls the pod whenever the configuration changes.
 
 **Removal:** `kea_dhcp_k8s_state: absent` deletes an instance's Deployment or DaemonSet, Services and Secret. It keeps the lease PVC unless you set `kea_dhcp_k8s_absent_delete_pvc: true`.
 
+**Stork sidecar:** to monitor these pods with
+[`git_cgallagher.isc.stork_agent`](../stork_agent/README.md), set
+`kea_dhcp_k8s_share_process_namespace: true` and pass the agent role's
+`stork_agent_k8s_containers` and `stork_agent_k8s_volumes` to
+`kea_dhcp_k8s_extra_containers` and `kea_dhcp_k8s_extra_volumes`. The sidecar
+needs Pod Security `privileged`. See
+[docs/stork-kubernetes.md](../../docs/stork-kubernetes.md).
+
 **GitOps:** set `kea_dhcp_k8s_apply: false` and `kea_dhcp_k8s_manifest_dir: ./rendered`. The role then writes one multi-document YAML file per instance. The Secret is in clear text, so encrypt it (SOPS or Sealed Secrets) before committing.
 
 ### EKS specifics
@@ -211,7 +221,7 @@ A config checksum annotation rolls the pod whenever the configuration changes.
 - **Where requests come from**: point relays (`ip helper-address`) at an **internal NLB** over Direct Connect or VPN.
   - With the AWS Load Balancer Controller, use `aws-load-balancer-type: external` and `nlb-target-type: ip`, and set `preserve_client_ip.enabled=true` so Kea sees the relay address.
   - Kea replies from the pod IP straight to the relay. Check that your relay accepts that address and that security groups allow UDP 67 both ways.
-- **Health checks**: an NLB can't health-check UDP. Enable `kea_dhcp_api_http_enabled` on `0.0.0.0` and point `aws-load-balancer-healthcheck-port` at TCP 8000 (see [`examples/eks-relay`](examples/eks-relay/)).
+- **Health checks**: an NLB can't health-check UDP. Enable `kea_dhcp_api_http_enabled` on `0.0.0.0` and point `aws-load-balancer-healthcheck-port` at TCP 8000 (see [`examples/kea_dhcp/eks-relay`](../../examples/kea_dhcp/eks-relay/)).
 - **Image architecture**: ISC images are **linux/amd64 only**, so the default `kea_dhcp_k8s_node_selector` keeps Kea off Graviton (and arm Talos) nodes. For arm64 nodes, build your own image and set `kea_dhcp_k8s_images`.
 - **Database and credentials**: RDS PostgreSQL/MySQL fits `shared_db`. Use `kea_dhcp_k8s_service_account_annotations` for IRSA, and `kea_dhcp_k8s_extra_volumes` for External Secrets/CSI mounts.
 
@@ -234,22 +244,22 @@ A config checksum annotation rolls the pod whenever the configuration changes.
 
 ## Testing
 
-CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. When all of them pass on a merge to `main`, a final job imports the role to Ansible Galaxy, using the `GALAXY_API_KEY` repository secret. To run the same checks locally, you need the following installed:
+The collection's CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. A green merge to `main` releases the collection to Galaxy. To run the same checks locally from the collection root, you need the following installed:
 
-- **`tests/run.sh`**: `ansible-core`, `kubernetes.core`, PyYAML, `openssl` and Docker. On Apple silicon, Docker also needs amd64 emulation.
+- **`tests/kea_dhcp/run.sh`**: `ansible-core`, `kubernetes.core`, PyYAML, `openssl` and Docker. On Apple silicon, Docker also needs amd64 emulation.
 - **Molecule**: `molecule`, `molecule-plugins[docker]`, the `docker` Python SDK and the `community.docker` collection.
 
 ```bash
-tests/run.sh
+tests/kea_dhcp/run.sh
 ```
 
-`tests/run.sh` renders 8 deployment shapes (14 instances) without a cluster and runs every generated config through `kea-<daemon> -t` in the ISC 2.6.5, 3.0.4 and 3.2.1 images. The `-t` check loads hook libraries, so it catches wrong HA keys or library paths.
+`tests/kea_dhcp/run.sh` renders 8 deployment shapes (14 instances) without a cluster and runs every generated config through `kea-<daemon> -t` in the ISC 2.6.5, 3.0.4 and 3.2.1 images. The `-t` check loads hook libraries, so it catches wrong HA keys or library paths.
 
 ```bash
-molecule test
+molecule test -s kea_dhcp
 ```
 
-`molecule test` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
+`molecule test -s kea_dhcp` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
 
 The Kubernetes path was also applied to a live 3-node kind cluster, in both the Talos-style host-network shape and the EKS-style service shape. Both HA pairs reached `HOT-STANDBY`, re-runs were idempotent, and removal worked. A Kea 2.6 HA pair running over an authenticated control agent was also run live from the role's output and reached `HOT-STANDBY`.
 
@@ -270,4 +280,4 @@ MIT
 
 ## Author Information
 
-Created in 2026 by [Chris Gallagher](https://cgallagher.net). Issues and pull requests are welcome at [git-cgallagher/ansible-role-kea-dhcp](https://github.com/git-cgallagher/ansible-role-kea-dhcp).
+Created in 2026 by [Chris Gallagher](https://cgallagher.net). Issues and pull requests are welcome at [git-cgallagher/ansible-collection-isc](https://github.com/git-cgallagher/ansible-collection-isc).

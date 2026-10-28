@@ -3,4 +3,4 @@
   hosts: all
   gather_facts: false
   roles:
-    - role: kea_dhcp
+    - role: git_cgallagher.isc.kea_dhcp

@@ -1,6 +1,6 @@
 ---
 collections:
-  - name: kubernetes.core      # kubernetes mode (also: pip install kubernetes)
+  - name: kubernetes.core      # Kubernetes mode, both Kea and Stork (also: pip install kubernetes)
     version: ">=5.0.0"
-  - name: community.general    # apk module (Alpine)
+  - name: community.general    # apk on Alpine
     version: ">=9.0.0"

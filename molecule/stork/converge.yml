@@ -3,9 +3,9 @@
 - name: Stork server
   hosts: stork_server
   become: true
-  roles: [git_cgallagher.stork.stork_server]
+  roles: [git_cgallagher.isc.stork_server]
 
 - name: Stork agents
   hosts: kea
   become: true
-  roles: [git_cgallagher.stork.stork_agent]
+  roles: [git_cgallagher.isc.stork_agent]

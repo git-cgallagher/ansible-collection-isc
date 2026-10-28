@@ -181,6 +181,11 @@ spec:
 {% if kea_dhcp_k8s_priority_class_name | length > 0 %}
 {%   set pod = pod | combine({'priorityClassName': kea_dhcp_k8s_priority_class_name}) %}
 {% endif %}
+{# A Stork agent sidecar (git_cgallagher.isc.stork_agent) finds Kea by scanning
+   processes, so it needs the pod's PID namespace shared. #}
+{% if kea_dhcp_k8s_share_process_namespace | bool %}
+{%   set pod = pod | combine({'shareProcessNamespace': true}) %}
+{% endif %}
 {% set template = {
       'metadata': {
         'labels': meta.kea_dhcp__labels | combine(kea_dhcp_k8s_pod_labels),

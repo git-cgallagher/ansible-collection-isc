@@ -1,7 +1,7 @@
 ---
 - name: Configure the ISC Stork repository
   ansible.builtin.include_role:
-    name: git_cgallagher.stork.stork_repository
+    name: git_cgallagher.isc.stork_repository
 
 - name: Pick the PostgreSQL packages
   ansible.builtin.set_fact:

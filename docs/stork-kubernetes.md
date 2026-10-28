@@ -31,7 +31,7 @@ Your Kea role puts the facts into its pod template, and the pod must also set
 - hosts: localhost
   connection: local
   roles:
-    - role: git_cgallagher.stork.stork_agent
+    - role: git_cgallagher.isc.stork_agent
       vars:
         stork_agent_deploy_mode: kubernetes
         stork_agent_image: registry.example/stork-agent:2.6.0-kea3.0.4

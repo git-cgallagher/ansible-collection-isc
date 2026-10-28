@@ -5,3 +5,5 @@ exclude_paths:
   - .molecule-collections/
   - .github/
   - .ansible/
+  - .cache/
+  - tests/kea_dhcp/output/

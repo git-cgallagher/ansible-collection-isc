@@ -1,4 +1,4 @@
-# git_cgallagher.stork.stork_agent
+# git_cgallagher.isc.stork_agent
 
 Installs the [ISC Stork](https://stork.readthedocs.io/) agent **next to an
 existing ISC Kea** and registers it with a Stork server. This role does not
@@ -53,7 +53,7 @@ main ones:
 
 ## Dependencies
 
-`git_cgallagher.stork.stork_repository`, included automatically in package
+`git_cgallagher.isc.stork_repository`, included automatically in package
 mode.
 
 ## Example Playbook
@@ -62,7 +62,7 @@ mode.
 - hosts: kea
   become: true
   roles:
-    - role: git_cgallagher.stork.stork_agent
+    - role: git_cgallagher.isc.stork_agent
       vars:
         stork_agent_version: "2.6.0"
         stork_agent_server_url: http://stork.example.internal:8080

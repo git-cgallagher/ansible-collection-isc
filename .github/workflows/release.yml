@@ -30,13 +30,15 @@ jobs:
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    # GALAXY_API_KEY lives in this environment, which only main may deploy to.
+    environment: galaxy
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: '3.13'
 
@@ -78,7 +80,7 @@ jobs:
           TARBALL: ${{ steps.meta.outputs.namespace }}-${{ steps.meta.outputs.name }}-${{ steps.meta.outputs.version }}.tar.gz
         run: |
           if [ -z "$GALAXY_API_KEY" ]; then
-            echo "::error::Repository secret GALAXY_API_KEY is not set (Settings > Secrets and variables > Actions)"
+            echo "::error::Secret GALAXY_API_KEY is not set in the 'galaxy' environment (Settings > Environments > galaxy)"
             exit 1
           fi
           ansible-galaxy collection publish "$TARBALL" --api-key "$GALAXY_API_KEY"

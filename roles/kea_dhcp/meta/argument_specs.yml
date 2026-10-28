@@ -479,6 +479,9 @@ argument_specs:
         type: list
         description: Extra containers (sidecars).
         elements: dict
+      kea_dhcp_k8s_share_process_namespace:
+        type: bool
+        description: Set shareProcessNamespace on Kea pods (needed for a Stork agent sidecar).
       kea_dhcp_k8s_capabilities:
         type: list
         description: Linux capabilities kept for Kea containers.

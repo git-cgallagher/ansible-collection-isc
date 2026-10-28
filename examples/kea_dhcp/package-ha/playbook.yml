@@ -6,4 +6,4 @@
   vars:
     kea_dhcp_bootstrap_python: true
   roles:
-    - role: kea_dhcp
+    - role: git_cgallagher.isc.kea_dhcp
