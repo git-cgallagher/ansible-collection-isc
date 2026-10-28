@@ -141,9 +141,8 @@
           delay: 3
           delegate_to: dc01
 
-        # Same client (same hw address, so same DHCID) on a new address: the
-        # update must replace its own A record (ms-dns uses
-        # check-exists-with-dhcid conflict resolution).
+        # Same client on a new address: the update must replace its A record
+        # (ms-dns uses no-check-with-dhcid; see vars/dns/ms-dns.yml).
         - name: Move the client to a second address and send its update
           ansible.builtin.command:
             cmd: "python3 /usr/local/lib/kea-ddns-cmd.py {{ kea_win_fqdn }}. {{ kea_win_ip2 }}"
@@ -160,6 +159,13 @@
           retries: 30
           delay: 3
           delegate_to: dc01
+
+        - name: Read the kea-dhcp-ddns log for signature failures
+          ansible.builtin.command:
+            cmd: grep -c GSS_TSIG_VERIFY_FAILED /var/log/kea-ddns-verify.log
+          register: kea_win_verify_failed
+          changed_when: false
+          failed_when: kea_win_verify_failed.stdout != '0'
       rescue:
         - name: Read the kea-dhcp-ddns log
           ansible.builtin.command:

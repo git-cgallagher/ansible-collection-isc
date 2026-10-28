@@ -20,6 +20,10 @@ kea_dhcp__dns_preset:
     # Kea own them so leases and DNS stay in step.
     ddns-override-client-update: true
     ddns-replace-client-name: never
-    # Records a Windows client registered itself carry no DHCID, so the RFC 4703
-    # default (check-with-dhcid) would refuse to replace them forever.
-    ddns-conflict-resolution-mode: check-exists-with-dhcid
+    # No prerequisites: Kea can't verify Microsoft DNS's GSS-TSIG signature on
+    # an update's error response ("Packet was replayed in wrong direction"), so
+    # every check-* mode fails as soon as a name already exists (found against
+    # Windows Server 2022 by the kea_dhcp_msdns_windows scenario). Kea still
+    # writes DHCID records; Windows clients' own records carry none, which
+    # check-with-dhcid would refuse to replace anyway.
+    ddns-conflict-resolution-mode: no-check-with-dhcid
