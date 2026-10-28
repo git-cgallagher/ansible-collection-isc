@@ -9,7 +9,7 @@
 | Lint | `ansible-lint` (production), `yamllint` | ✅ |
 | Sanity | `ansible-test sanity` | ✅ |
 
-The Kea in `molecule/stork` comes from that scenario's `prepare.yml`, a
+The Kea in `extensions/molecule/stork` comes from that scenario's `prepare.yml`, a
 fixture. The real Kea role is tested by its own scenario.
 
 ## Not covered yet
