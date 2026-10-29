@@ -16,6 +16,8 @@
     script: |
       param($Account, $Password, $Upn, $Spn, $Ou, [bool]$UpdateProxy)
       $ErrorActionPreference = 'Stop'
+      # win_powershell reports changed unless the script says otherwise.
+      $Ansible.Changed = $false
       Import-Module ActiveDirectory
       $user = Get-ADUser -Filter "SamAccountName -eq '$Account'" -Properties servicePrincipalName, userPrincipalName
       if (-not $user) {
@@ -44,7 +46,16 @@
               $Ansible.Changed = $true
           }
       }
+  # no_log would also censor the error; it is reported by the next task.
+  register: kea_dhcp_msdns__account
+  failed_when: false
   no_log: true
+
+- name: Report a service account failure
+  ansible.builtin.assert:
+    that: kea_dhcp_msdns__account.error | default([]) | length == 0
+    fail_msg: "Service account setup failed: {{ kea_dhcp_msdns__account.error | default([]) | map(attribute='output') | list }}"
+    quiet: true
 
 - name: Ensure the zones exist with secure dynamic updates
   ansible.windows.win_powershell:
@@ -54,6 +65,8 @@
     script: |
       param([string[]]$Zones, $DynamicUpdate)
       $ErrorActionPreference = 'Stop'
+      # win_powershell reports changed unless the script says otherwise.
+      $Ansible.Changed = $false
       Import-Module DnsServer
       foreach ($name in $Zones) {
           $name = $name.TrimEnd('.')
@@ -90,11 +103,24 @@
           param($Principal, $MapUser, $Password, $Crypto, $Out)
           $ErrorActionPreference = 'Stop'
           Remove-Item -LiteralPath $Out -Force -ErrorAction SilentlyContinue
-          & ktpass.exe -princ $Principal -mapuser $MapUser -pass $Password -mapop set `
-              -ptype KRB5_NT_PRINCIPAL -crypto $Crypto -out $Out | Out-Null
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Out)) { throw "ktpass failed ($LASTEXITCODE)" }
+          # ktpass writes progress to stderr; with 'Stop', Windows PowerShell
+          # 5.1 would turn its first line into a terminating error.
+          $ErrorActionPreference = 'Continue'
+          $log = & ktpass.exe -princ $Principal -mapuser $MapUser -pass $Password -mapop set `
+              -ptype KRB5_NT_PRINCIPAL -crypto $Crypto -out $Out 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Out)) {
+              throw "ktpass failed ($LASTEXITCODE): $($log.Replace($Password, '********'))"
+          }
           $Ansible.Changed = $true
+      register: kea_dhcp_msdns__ktpass
+      failed_when: false
       no_log: true
+
+    - name: Report a ktpass failure
+      ansible.builtin.assert:
+        that: kea_dhcp_msdns__ktpass.error | default([]) | length == 0
+        fail_msg: "Keytab generation failed: {{ kea_dhcp_msdns__ktpass.error | default([]) | map(attribute='output') | list }}"
+        quiet: true
 
     - name: Fetch the keytab to the controller
       ansible.builtin.fetch:

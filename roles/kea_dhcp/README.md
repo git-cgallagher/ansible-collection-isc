@@ -238,7 +238,8 @@ Optional keys: `forward_zones`, `realm` (default: the domain upper-cased), `clie
 - **Zones:** forward and reverse zones exist in AD, set to *Secure only* dynamic updates. Updating a reverse zone that doesn't exist fails with a misleading "Packet was replayed in wrong direction".
 - **`servers[].name`** is each DC's real host name. The DNS service principal is `DNS/<dc>.<domain>@<REALM>`.
 - **Time sync:** Kerberos tolerates 5 minutes of skew, so point Kea hosts and DCs at the same NTP source.
-- **Windows clients register their own A records.** The preset sets `ddns-override-client-update: true` so Kea owns them, and `ddns-conflict-resolution-mode: check-exists-with-dhcid`. Self-registered records carry no DHCID, so the default (`check-with-dhcid`) would never replace them.
+- **Windows clients register their own A records.** The preset sets `ddns-override-client-update: true` so Kea owns them.
+- **No update prerequisites.** The preset sets `ddns-conflict-resolution-mode: no-check-with-dhcid`. Kea can't verify the GSS-TSIG signature on Microsoft DNS's error responses (`GSS_TSIG_VERIFY_FAILED … Packet was replayed in wrong direction`). Every `check-*` mode sends prerequisites, so it fails as soon as a name already exists. Kea still writes DHCID records. Self-registered Windows records carry none, so `check-with-dhcid` would refuse to replace them anyway.
 - **Preset flags:** `gss-replay-flag: false` (ISC reports anti-replay problems with Microsoft DNS) and `tkey-protocol: TCP`.
 - **What the tests cover:** Kerberos and the GSS-TSIG key exchange are verified against a Samba AD DC, and signed record updates are verified against BIND. Microsoft DNS Server's own signature check hasn't been exercised by this role's tests; ISC documents it as supported. Samba's built-in DNS server isn't a usable stand-in: it rejects Kea's signed updates, and even BIND's `nsupdate -g` can't verify its responses.
 

@@ -42,6 +42,7 @@ molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
 molecule test -s kea_dhcp_ha3       # 3-node HA states + failover
 molecule test -s kea_dhcp_dns       # DDNS: GSS-TSIG + TSIG updates land in BIND
 molecule test -s kea_dhcp_msdns     # AD side (Samba) + Kea Kerberos/TKEY
+molecule test -s kea_dhcp_msdns_windows  # real Windows DC + Microsoft DNS (Linux+KVM only; CI: manual windows-dc workflow)
 molecule test -s kea_dhcp_container # container mode (native-arch nodes; dockerd crashes under QEMU)
 molecule test -s stork
 ```
@@ -146,6 +147,12 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   - The AD account's **UPN must equal Kea's client principal**: AD only issues TGTs to UPNs. `ktpass -mapuser` does it on Windows; Samba needs `ldbmodify` (`ldb-tools`). The symptom is `GSS_TSIG_NEW_KEY_SETUP_FAILED ... bad client credentials`, and `kinit -k -t <keytab> <principal>` gives a one-line diagnosis.
   - `client-keytab` alone is enough; no credentials cache is needed.
   - Samba's internal DNS rejects Kea's signed updates (`gssapi_check_packet ... NT_STATUS_ACCESS_DENIED`), and its response TSIG fails even for `nsupdate -g`. Samba with BIND9_DLZ couldn't decrypt AES-256 tickets (exportkeytab omits AES-256 for the DNS principal). So signed updates are tested against MIT KDC + BIND (`kea_dhcp_dns`), and AD/Kerberos against Samba (`kea_dhcp_msdns`).
+  - **Microsoft DNS (real Windows Server 2022, learned 2026-10-28):**
+    - Kea can't verify the GSS-TSIG signature on Microsoft DNS's error responses (`GSS_TSIG_VERIFY_FAILED ... Packet was replayed in wrong direction`, then `..._RESP_CORRUPT`). A first update for a new name works; one whose prerequisite fails doesn't. So the `ms-dns` preset uses `no-check-with-dhcid` (no prerequisites).
+    - `win_powershell` reports `changed` unless the script sets `$Ansible.Changed = $false`.
+    - `no_log` also censors the error. The Windows tasks register with `failed_when: false` and fail in a following assert that shows the PowerShell error with the password masked.
+    - The domain's password complexity rejects a password containing the account name (`kea`).
+    - `kea_dhcp_msdns_windows` runs only on Linux with `/dev/kvm` (the GitHub runner), not on a Mac. It reaches the DC through QEMU user-mode port forwards on 127.0.0.1 (5985, 15353→53, 18088→88), so Kea's config uses `servers[].port` and `kdcs: ['127.0.0.1:18088']`.
   - Keytabs are binary: in Kubernetes they go through `slurp` into the Secret's `data`, never `stringData` or text lookups.
   - Presets live in `vars/dns/<integration>.yml` as one internal dict, `kea_dhcp__dns_preset`, so it never outranks `kea_dhcp_dns`.
 - Test nodes: `debian:12` has no `pgrep` (install `procps`); AL2023 has no `setsid` (use Ansible async); `dig` segfaults under QEMU (query from a native node).
@@ -245,7 +252,7 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## TODO / follow-ups
 
-- Run `kea_dhcp_msdns`'s Windows backend and an `ms-dns` update against a real Windows DC (Microsoft DNS's GSS-TSIG verifier is untested here).
+- Re-run the manual `windows-dc` workflow after changes to `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates (last green: 2026-10-28). It's untested on Windows Server 2025 and on a real multi-DC domain.
 - Automate the Stork sidecar live test, which was done by hand in 1.4.0 (see
   `docs/testing.md`). It needs a k3s or kind job with amd64 Kea images, so an
   amd64 CI runner.

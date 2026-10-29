@@ -1,0 +1,119 @@
+---
+# The box's local accounts become domain accounts when it's promoted to the
+# first DC of a new forest, so the connection keeps working as `vagrant`
+# (PSRP + NTLM, which unlike Basic auth works for domain accounts).
+- name: Promote the VM to the first DC of a new forest, with Microsoft DNS
+  hosts: dc01
+  gather_facts: false
+  tasks:
+    - name: Wait for the connection
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+
+    - name: Quiet the VM (Windows Update off, Defender real-time scanning off)
+      ansible.windows.win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+          Set-Service -Name wuauserv -StartupType Disabled -ErrorAction SilentlyContinue
+          try {
+              Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
+          }
+          catch {
+              $Ansible.Result = "Defender not changed: $($_.Exception.Message)"
+          }
+
+    # Kea's server principal is DNS/<hostname>.<domain>, so the DC's name is
+    # fixed instead of whatever the sysprepped box picked.
+    - name: Name the DC
+      ansible.windows.win_hostname:
+        name: "{{ lab_hostname }}"
+      register: lab_rename
+
+    - name: Reboot after the rename
+      ansible.windows.win_reboot:
+        reboot_timeout: 900
+      when: lab_rename.reboot_required
+
+    - name: Point DNS at itself (the DC will host the domain's DNS)
+      ansible.windows.win_dns_client:
+        adapter_names: '*'
+        dns_servers: [127.0.0.1]
+
+    # RSAT-DNS-Server provides the DnsServer module kea_dhcp_msdns uses.
+    - name: Install AD DS, DNS and their PowerShell modules
+      ansible.windows.win_feature:
+        name: [AD-Domain-Services, DNS, RSAT-AD-PowerShell, RSAT-DNS-Server]
+        include_management_tools: true
+        state: present
+
+    - name: Create the forest (installs AD-integrated Microsoft DNS)
+      microsoft.ad.domain:
+        dns_domain_name: "{{ lab_domain }}"
+        domain_netbios_name: "{{ lab_netbios }}"
+        safe_mode_password: "{{ lab_dsrm_password }}"
+        install_dns: true
+        reboot: false
+      register: lab_forest
+
+    # "Available" means ADWS answers and the DNS server hosts the domain's
+    # zone, not merely "WinRM is up". Any error must exit non-zero.
+    - name: Reboot and wait until AD and DNS are available
+      ansible.windows.win_reboot:
+        reboot_timeout: 1800
+        test_command: >-
+          try {
+          Import-Module ActiveDirectory, DnsServer -ErrorAction Stop;
+          $null = Get-ADDomain -ErrorAction Stop;
+          $null = Get-DnsServerZone -Name '{{ lab_domain }}' -ErrorAction Stop;
+          exit 0
+          } catch { exit 1 }
+      when: lab_forest.reboot_required | default(false)
+
+    - name: Make the connection account a Domain Admin
+      ansible.windows.win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $members = @(Get-ADGroupMember -Identity 'Domain Admins' | ForEach-Object { $_.SamAccountName })
+          if ($members -notcontains $env:USERNAME) {
+              Add-ADGroupMember -Identity 'Domain Admins' -Members $env:USERNAME
+              $Ansible.Changed = $true
+          }
+
+    # The PSRP session's logon token predates the membership change.
+    - name: Reconnect so the new group membership is in the logon token
+      ansible.builtin.meta: reset_connection
+
+    # Kerberos tolerates 5 minutes of skew. The VM's clock starts from the
+    # host's RTC and a lone PDC has no time source, so set it from the
+    # controller (the Kea container shares the runner's clock).
+    - name: Set the DC's clock from the controller
+      ansible.windows.win_powershell:
+        parameters:
+          Epoch: "{{ now(utc=true).timestamp() | int }}"
+        script: |
+          param([long]$Epoch)
+          $target = [DateTimeOffset]::FromUnixTimeSeconds($Epoch).UtcDateTime
+          $skew = [math]::Abs(([DateTime]::UtcNow - $target).TotalSeconds)
+          $Ansible.Result = [math]::Round($skew)
+          $Ansible.Changed = $skew -gt 30
+          if ($Ansible.Changed) { Set-Date -Date $target.ToLocalTime() | Out-Null }
+      register: lab_clock
+
+    - name: Show the domain
+      ansible.windows.win_powershell:
+        script: |
+          $Ansible.Changed = $false
+          $d = Get-ADDomain
+          [ordered]@{
+              dns_root   = $d.DNSRoot
+              pdc        = $d.PDCEmulator
+              zones      = @(Get-DnsServerZone | ForEach-Object { $_.ZoneName })
+              clock_skew = '{{ lab_clock.result }} s before the correction'
+              os         = (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
+          }
+      register: lab_domain_info
+
+    - name: Report the domain
+      ansible.builtin.debug:
+        var: lab_domain_info.output

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.6.1 — 2026-10-28
+
+Fixes found by running `ms-dns` against a real Windows Server 2022 domain
+controller for the first time.
+
+- **`kea_dhcp` `ms-dns` preset:** `ddns-conflict-resolution-mode` is now
+  `no-check-with-dhcid` (was `check-exists-with-dhcid`). Kea can't verify the
+  GSS-TSIG signature on Microsoft DNS's error responses
+  (`GSS_TSIG_VERIFY_FAILED … Packet was replayed in wrong direction`). So any
+  update that carries prerequisites failed as soon as the name already existed,
+  for example a client moving to a new address. Kea still writes DHCID
+  records. Set the mode in `kea_dhcp_dns.dhcp_ddns_params` to override it.
+- **`kea_dhcp_msdns` (Windows backend):**
+  - The account and zone tasks reported `changed` on every run, because
+    `win_powershell` defaults to changed. They now report a change only when
+    they make one.
+  - A failure in the service-account or `ktpass` task now shows the PowerShell
+    error with the password masked, instead of a censored result. For example,
+    domain complexity rejects a password that contains the account name.
+  - `ktpass` output is captured instead of discarded.
+- New Molecule scenario **`kea_dhcp_msdns_windows`** and manual workflow
+  **`windows-dc`**. They boot a Windows Server 2022 DC with Microsoft DNS under
+  QEMU/KVM on the GitHub runner. The scenario runs `kea_dhcp_msdns`'s Windows
+  backend, deploys Kea on AL2023 x86-64, and reads the A and PTR records from
+  Kea's GSS-TSIG updates back out of Microsoft DNS.
+
 ## 1.6.0 — 2026-10-28
 
 - **`stork_server`, `stork_agent`, `stork_repository`**: new

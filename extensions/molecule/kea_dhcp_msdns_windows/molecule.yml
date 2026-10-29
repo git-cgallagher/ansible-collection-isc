@@ -1,0 +1,67 @@
+---
+# kea_dhcp_dns_integration: ms-dns against a real Windows Server 2022 domain
+# controller running Microsoft DNS. Molecule boots the DC under QEMU/KVM
+# (create.yml, from git_cgallagher.gpo's domain_lab), kea_dhcp_msdns prepares
+# AD with its Windows backend (account, UPN, SPN, DnsUpdateProxy, zones,
+# ktpass keytab), kea_dhcp deploys Kea in an Amazon Linux 2023 x86-64
+# container, and verify checks that Kea's signed updates land in Microsoft DNS.
+# Needs a Linux x86-64 host with /dev/kvm, Docker and ~20 GB free in
+# $KEA_LAB_DIR; ~15 min. See README.md.
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_SCENARIO_DIRECTORY}/requirements.yml
+driver:
+  name: default
+  options:
+    managed: true
+platforms:
+  - name: dc01
+    # jborean93's packer-windoze box: a sysprepped Windows Server 2022
+    # evaluation image built for Ansible WinRM/PSRP testing (microsoft.ad's
+    # own integration tests use it). Pinned by version + SHA-256.
+    box_url: https://vagrantcloud.com/jborean93/boxes/WindowsServer2022/versions/1.2.0/providers/libvirt/amd64/vagrant.box
+    box_sha256: bc2e6a173390d4457e66ba30d5ffff7dbc87b849532bc0f41f4c1246f4e53bd4
+    box_user: vagrant
+    box_password: vagrant
+    memory_mb: 4096
+    cpus: 2
+    winrm_port: 5985
+    # Host-side ports forwarded to the DC's DNS (53) and Kerberos KDC (88).
+    dns_port: 15353
+    kdc_port: 18088
+  - name: kea-win
+    image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
+provisioner:
+  name: ansible
+  env:
+    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections
+  inventory:
+    host_vars:
+      dc01:
+        ansible_psrp_protocol: http
+        # Nested-virt VMs occasionally drop a connection; retry instead of failing.
+        ansible_psrp_reconnection_retries: 3
+    group_vars:
+      all:
+        # Box cache, VM disk, pidfile and monitor socket (CI points it at the
+        # runner's large /mnt disk).
+        lab_dir: "{{ lookup('ansible.builtin.env', 'KEA_LAB_DIR') | default(lookup('ansible.builtin.env', 'HOME') ~ '/.cache/kea-domain-lab', true) }}"
+        lab_hostname: dc01
+        lab_domain: kealab.test
+        lab_netbios: KEALAB
+        lab_realm: KEALAB.TEST
+        # Throwaway VM reachable only on the runner's loopback.
+        lab_dsrm_password: Example-not-secret-1
+        # Domain complexity rules reject a password containing the account name ("kea").
+        lab_kea_password: Example-not-secret-Dhcp-1
+        # Leases Kea hands out (they never reach a wire: lease4-add) and the
+        # reverse zone kea_dhcp_msdns creates for them.
+        lab_subnet: 10.60.0.0/24
+        lab_reverse_zone: 0.60.10.in-addr.arpa
+        lab_keytab: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/kea.keytab"
+verifier:
+  name: ansible
+scenario:
+  test_sequence: [dependency, destroy, syntax, create, prepare, converge, idempotence, verify, destroy]
