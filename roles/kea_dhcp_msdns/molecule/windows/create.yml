@@ -79,7 +79,7 @@
         timeout: 5
         msg: >-
           127.0.0.1:{{ lab_platform.winrm_port }} is already in use — a VM from a
-          previous run? Run `molecule destroy -s kea_dhcp_msdns_windows` first.
+          previous run? Run `molecule destroy -s windows` (in roles/kea_dhcp_msdns) first.
 
     # --- box image (cached across runs, keyed by checksum) -----------------------
     - name: Fetch and unpack the box

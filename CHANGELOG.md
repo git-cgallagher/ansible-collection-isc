@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.2 — 2026-10-31
+
+No role behaviour changes.
+
+- **Molecule scenarios moved back under their roles**, from
+  `extensions/molecule/<scenario>` to `roles/<role>/molecule/<scenario>`. Run
+  them from the role's directory, for example
+  `cd roles/kea_dhcp && molecule test -s ha3`.
+
+  | Was | Now |
+  |---|---|
+  | `kea_dhcp` | `roles/kea_dhcp/molecule/default` |
+  | `kea_dhcp_ha3` | `roles/kea_dhcp/molecule/ha3` |
+  | `kea_dhcp_container` | `roles/kea_dhcp/molecule/container` |
+  | `kea_dhcp_dns` | `roles/kea_dhcp/molecule/dns` |
+  | `kea_dhcp_msdns` | `roles/kea_dhcp_msdns/molecule/default` |
+  | `kea_dhcp_msdns_windows` | `roles/kea_dhcp_msdns/molecule/windows` |
+  | `stork` | `roles/stork_server/molecule/default` |
+  | `stork_container` | `roles/stork_agent/molecule/container` |
+
+  `galaxy.yml` `build_ignore` now lists `roles/*/molecule`, so the scenarios
+  still aren't in the Galaxy tarball. CI check names are unchanged.
+
 ## 1.6.1 — 2026-10-28
 
 Fixes found by running `ms-dns` against a real Windows Server 2022 domain

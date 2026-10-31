@@ -36,7 +36,7 @@ provisioner:
   name: ansible
   env:
     # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
-    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/../../.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/../../collections:~/.ansible/collections
   inventory:
     host_vars:
       dc01:

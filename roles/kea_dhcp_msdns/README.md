@@ -62,14 +62,14 @@ All variables are in [`meta/argument_specs.yml`](meta/argument_specs.yml), and [
 
 ## Testing
 
-`molecule test -s kea_dhcp_msdns` (from the collection root) runs the Samba backend against a fresh Samba AD DC, then deploys Kea with `ms-dns` on Amazon Linux 2023 x86-64. It verifies:
+`molecule test -s default` (from this role's directory in a checkout of the collection) runs the Samba backend against a fresh Samba AD DC, then deploys Kea with `ms-dns` on Amazon Linux 2023 x86-64. It verifies:
 - the account's UPN, SPN and DnsUpdateProxy membership, and the reverse zone;
 - `kinit` from the Kea host using the keytab and `krb5.conf` that `kea_dhcp` deployed;
 - the DDNS daemon's GSS-TSIG key exchange with the DC.
 
 A second run must change nothing.
 
-`molecule test -s kea_dhcp_msdns_windows` runs the **Windows backend** against a real Windows Server 2022 domain controller. The DC runs Microsoft DNS and is booted under QEMU/KVM. Kea's A and PTR updates are read back out of Microsoft DNS. It needs Linux with KVM, so CI runs it only on demand: `gh workflow run windows-dc.yml`. See [its README](../../extensions/molecule/kea_dhcp_msdns_windows/README.md).
+`molecule test -s windows` runs the **Windows backend** against a real Windows Server 2022 domain controller. The DC runs Microsoft DNS and is booted under QEMU/KVM. Kea's A and PTR updates are read back out of Microsoft DNS. It needs Linux with KVM, so CI runs it only on demand: `gh workflow run windows-dc.yml`. See [its README](molecule/windows/README.md).
 
 ## License
 

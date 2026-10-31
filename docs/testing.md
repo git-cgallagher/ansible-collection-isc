@@ -3,16 +3,16 @@
 | Check | How | Result (2026-10-27) |
 |---|---|---|
 | Kea render | `tests/kea_dhcp/run.sh`: 8 deployment shapes (14 instances) rendered without a cluster, every config checked with `kea-<daemon> -t` in the ISC 2.6.5 / 3.0.4 / 3.2.1 images | ✅ see CI |
-| Kea packages | `molecule test -s kea_dhcp`: Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and 3.22 (distro); install, idempotence, config re-validation | ✅ see CI (services aren't started: no init in those containers) |
-| Stork | `molecule test -s stork`: server on Ubuntu 24.04; agents next to Kea 3.0.4 on AL2023 (no API auth) and Kea 3.2.1 on Debian 12 (basic auth via `user-file`/`password-file`) | ✅ both daemons active + monitored, unattended registration, rotated admin password |
-| Stork on AL2023, Kea in containers | `molecule test -s stork_container`: server from packages + PostgreSQL 16 on Amazon Linux 2023; `kea_dhcp` container mode (Kea 3.0.4, basic auth) and `stork_agent` container mode on an AL2023 node with its own Docker engine | ✅ the agent registered unattended, the daemon is active + monitored, units running, idempotent |
+| Kea packages | `molecule test -s default` in `roles/kea_dhcp`: Debian 12, Ubuntu 24.04, Rocky 9, Alpine 3.20 (ISC) and 3.22 (distro); install, idempotence, config re-validation | ✅ see CI (services aren't started: no init in those containers) |
+| Stork | `molecule test -s default` in `roles/stork_server`: server on Ubuntu 24.04; agents next to Kea 3.0.4 on AL2023 (no API auth) and Kea 3.2.1 on Debian 12 (basic auth via `user-file`/`password-file`) | ✅ both daemons active + monitored, unattended registration, rotated admin password |
+| Stork on AL2023, Kea in containers | `molecule test -s container` in `roles/stork_agent`: server from packages + PostgreSQL 16 on Amazon Linux 2023; `kea_dhcp` container mode (Kea 3.0.4, basic auth) and `stork_agent` container mode on an AL2023 node with its own Docker engine | ✅ the agent registered unattended, the daemon is active + monitored, units running, idempotent |
 | Kubernetes | Stork server manifests and the generated sidecar spec checked with `kubectl apply --dry-run=server` (k3s 1.33). The Kea Kubernetes path was proven live on kind before the merge (see the Kea role README). | ✅ |
 | Stork sidecar, live (2026-10-28, by hand) | k3s 1.33 in Docker. `stork_server` in Kubernetes mode against an in-cluster PostgreSQL, with the admin password rotated through a port-forward. Then `stork_agent` (Kubernetes mode) plus `kea_dhcp`: a hot-standby pair in service network mode, with API basic auth for `ha` and `stork`. Stork 2.6.0, Kea 3.0.4. Also tested: a pod deleted, and an agent re-registered with fresh state at the same address. | ✅ both daemons active + monitored, subnet found on both, HA hot-standby with both peers in touch. Fixes from this run are in CHANGELOG 1.4.0; [stork-kubernetes.md](stork-kubernetes.md) lists the behaviour seen. |
 | Argument specs | `tests/argument_specs/run.sh` (workflow `argument-specs`, ansible-core 2.18 and 2.21): every role's spec matches its defaults (names, types, choices, `no_log` on secrets); `ansible-doc` loads each role; each role rejects a bad value through its spec | ✅ |
 | Lint | `ansible-lint` (production), `yamllint` | ✅ |
 | Sanity | `ansible-test sanity` | ✅ |
 
-The Kea in `extensions/molecule/stork` comes from that scenario's `prepare.yml`, a
+The Kea in `roles/stork_server/molecule/default` comes from that scenario's `prepare.yml`, a
 fixture. The real Kea role is tested by its own scenario.
 
 ## Not covered yet

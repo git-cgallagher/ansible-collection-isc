@@ -34,7 +34,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           # Paths that are NOT in the tarball (galaxy.yml build_ignore).
-          ignore='^(\.github/|extensions/molecule/|tests/|AGENTS\.md$|\.ansible-lint$|\.yamllint$|\.gitignore$)'
+          ignore='^(\.github/|roles/[^/]+/molecule/|tests/|AGENTS\.md$|\.ansible-lint(-ignore)?$|\.yamllint$|\.gitignore$)'
           shipped=$(git diff --name-only "$BASE"...HEAD | grep -Ev "$ignore" || true)
           if [ -z "$shipped" ]; then echo "No shipped files changed; no release needed."; exit 0; fi
           echo "Shipped files changed:"; echo "$shipped" | sed 's/^/  /'
@@ -80,7 +80,7 @@ jobs:
           pip install ansible-core ansible-lint yamllint
           ansible-galaxy collection install -r requirements.yml
           # microsoft.ad: the Windows DC scenario's prepare (not a role dependency).
-          ansible-galaxy collection install -r extensions/molecule/kea_dhcp_msdns_windows/requirements.yml
+          ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
       - run: yamllint .
       - run: ansible-lint
 
@@ -123,7 +123,8 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s kea_dhcp --platform-name ${{ matrix.platform }}
+      - working-directory: roles/kea_dhcp
+        run: molecule test -s default --platform-name ${{ matrix.platform }}
 
   molecule-kea-ha3:
     # Three-node HA (primary + standby + backup) on Amazon Linux 2023 minimal:
@@ -145,7 +146,8 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s kea_dhcp_ha3
+      - working-directory: roles/kea_dhcp
+        run: molecule test -s ha3
 
   molecule-kea-container:
     # Container mode: AL2023 nodes with systemd + Docker, Kea under units.
@@ -166,7 +168,8 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s kea_dhcp_container
+      - working-directory: roles/kea_dhcp
+        run: molecule test -s container
 
   molecule-stork-container:
     # Stork on AL2023: server from packages, agent in a container next to
@@ -188,7 +191,8 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s stork_container
+      - working-directory: roles/stork_agent
+        run: molecule test -s container
 
   molecule-kea-dhcp-dns:
     # DDNS end to end: MIT KDC + BIND 9, GSS-TSIG and TSIG updates.
@@ -209,7 +213,8 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s kea_dhcp_dns
+      - working-directory: roles/kea_dhcp
+        run: molecule test -s dns
 
   molecule-kea-dhcp-msdns:
     # AD side on Samba + Kea Kerberos/GSS-TSIG key exchange (ms-dns).
@@ -230,7 +235,8 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s kea_dhcp_msdns
+      - working-directory: roles/kea_dhcp_msdns
+        run: molecule test -s default
 
   molecule-stork:
     name: molecule stork
@@ -247,4 +253,5 @@ jobs:
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
           ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
-      - run: molecule test -s stork
+      - working-directory: roles/stork_server
+        run: molecule test -s default
