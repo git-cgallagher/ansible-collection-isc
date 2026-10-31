@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+# Every pip install below uses .github/ci/requirements.txt as constraints, so
+# all jobs run the same ansible-core (capped to the sanity matrix's range) and
+# tool versions. The sanity job installs its own ansible-core via the action.
 env:
   PY_COLORS: '1'
   ANSIBLE_FORCE_COLOR: '1'
@@ -77,7 +80,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core ansible-lint yamllint
+          pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint
           ansible-galaxy collection install -r requirements.yml
           # microsoft.ad: the Windows DC scenario's prepare (not a role dependency).
           ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
@@ -97,7 +100,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core pyyaml kubernetes
+          pip install -c .github/ci/requirements.txt ansible-core pyyaml kubernetes
           ansible-galaxy collection install -r requirements.yml
       - run: tests/kea_dhcp/run.sh
 
@@ -116,7 +119,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r requirements.yml
           ansible-galaxy collection install community.docker
       - name: Expose the checkout as git_cgallagher.isc
@@ -139,7 +142,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r requirements.yml
           ansible-galaxy collection install community.docker
       - name: Expose the checkout as git_cgallagher.isc
@@ -161,7 +164,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r requirements.yml
           ansible-galaxy collection install community.docker
       - name: Expose the checkout as git_cgallagher.isc
@@ -184,7 +187,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install "ansible-core>=2.18,<2.22" molecule 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r requirements.yml
           ansible-galaxy collection install community.docker
       - name: Expose the checkout as git_cgallagher.isc
@@ -206,7 +209,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r requirements.yml
           ansible-galaxy collection install community.docker
       - name: Expose the checkout as git_cgallagher.isc
@@ -228,7 +231,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: |
-          pip install ansible-core molecule 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r requirements.yml
           ansible-galaxy collection install community.docker
       - name: Expose the checkout as git_cgallagher.isc
@@ -248,7 +251,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: '3.13'
-      - run: pip install "ansible-core>=2.18,<2.22" molecule "molecule-plugins[docker]"
+      - run: pip install -c .github/ci/requirements.txt ansible-core molecule "molecule-plugins[docker]"
       - name: Expose the checkout as git_cgallagher.isc
         run: |
           mkdir -p .molecule-collections/ansible_collections/git_cgallagher
