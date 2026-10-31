@@ -1,5 +1,6 @@
 ---
-# Inputs: _api (base URL ending in /api). Logs in with the bootstrap
+# Inputs: _api (base URL ending in /api), _validate_certs, _ca_path ("" = system
+# trust store). Logs in with the bootstrap
 # password; if that still works, sets stork_server_admin_password. A no-op once the
 # password has been rotated (the bootstrap login then fails).
 - name: Rotate the bootstrap admin password
@@ -11,7 +12,8 @@
         method: POST
         body_format: json
         body: { authenticationMethodId: internal, identifier: "{{ stork_server_admin_user }}", secret: "{{ stork_server_admin_bootstrap_password }}" }
-        validate_certs: false
+        validate_certs: "{{ _validate_certs }}"
+        ca_path: "{{ _ca_path | default(omit, true) }}"
         status_code: [200, 400, 401, 403]
       register: _stork_server_boot_login
       until: _stork_server_boot_login.status != -1
@@ -26,7 +28,8 @@
         body_format: json
         body: { oldpassword: "{{ stork_server_admin_bootstrap_password }}", newpassword: "{{ stork_server_admin_password }}" }
         headers: { Cookie: "{{ _stork_server_boot_login.cookies_string }}" }
-        validate_certs: false
+        validate_certs: "{{ _validate_certs }}"
+        ca_path: "{{ _ca_path | default(omit, true) }}"
         # 400 = the password policy refused it; reported by the next task.
         status_code: [200, 400]
       register: _stork_server_set_password

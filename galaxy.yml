@@ -1,6 +1,6 @@
 namespace: git_cgallagher
 name: isc
-version: 1.6.2
+version: 2.0.0
 readme: README.md
 authors:
   - Chris Gallagher (@git-cgallagher)

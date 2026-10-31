@@ -55,7 +55,10 @@
   retries: 30
   delay: 2
 
+# Loopback, so the certificate's name can't match; nothing leaves the host.
 - name: Rotate the bootstrap admin password
   ansible.builtin.include_tasks: rotate_admin.yml
   vars:
     _api: "{{ 'https' if stork_server_tls else 'http' }}://127.0.0.1:{{ stork_server_rest_port }}/api"
+    _validate_certs: false
+    _ca_path: ""
