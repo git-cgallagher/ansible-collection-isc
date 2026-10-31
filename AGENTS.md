@@ -153,6 +153,11 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - Molecule loads **every** scenario in a role's `molecule/` dir, so a job needs every driver its
   siblings use: `windows-dc` installs `molecule-plugins[docker]` although `windows` itself uses the
   default driver ("Failed to find driver docker" otherwise).
+- **`sanity (devel)` runs in a virtualenv, not the action** (2026-10-31). `ansible-test-gh-action`
+  always uses `ansible-test --docker`, and devel's `default-test-container` failed to start on
+  GitHub runners (`mount -o remount,rw /sys/fs/cgroup/` exit 1), so the canary never tested
+  anything. The `sanity-devel` job installs ansible-core devel and runs `ansible-test sanity --venv`.
+  It stays non-required (`continue-on-error`).
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not

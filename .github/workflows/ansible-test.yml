@@ -55,17 +55,37 @@ jobs:
   sanity:
     name: sanity (${{ matrix.ansible-core-version }})
     runs-on: ubuntu-latest
-    # devel is an early warning, never a merge gate.
-    continue-on-error: ${{ matrix.ansible-core-version == 'devel' }}
     strategy:
       fail-fast: false
       matrix:
-        ansible-core-version: [stable-2.18, stable-2.19, stable-2.20, stable-2.21, devel]
+        ansible-core-version: [stable-2.18, stable-2.19, stable-2.20, stable-2.21]
     steps:
       - uses: ansible-community/ansible-test-gh-action@6ded727edb598e670ac056a8e680ca4050bac0a3  # v1.18.0
         with:
           ansible-core-version: ${{ matrix.ansible-core-version }}
           testing-type: sanity
+
+  # devel is an early warning, never a merge gate. ansible-test-gh-action always
+  # runs ansible-test --docker, and devel's test container fails to start on
+  # GitHub runners ('mount -o remount,rw /sys/fs/cgroup/' exits 1, 2026-10), so
+  # devel runs sanity in a virtualenv instead. Same check name as before.
+  sanity-devel:
+    name: sanity (devel)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          path: ansible_collections/git_cgallagher/isc
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install ansible-core devel
+        run: pip install https://github.com/ansible/ansible/archive/devel.tar.gz
+      - name: ansible-test sanity --venv
+        working-directory: ansible_collections/git_cgallagher/isc
+        run: ansible-test sanity --venv --python 3.13 --color -v
 
   lint:
     runs-on: ubuntu-latest

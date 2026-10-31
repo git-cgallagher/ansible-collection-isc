@@ -1,7 +1,7 @@
 ---
 # kea_dhcp_dns_integration: ms-dns against a real Windows Server 2022 domain
 # controller running Microsoft DNS. Molecule boots the DC under QEMU/KVM
-# (create.yml, from git_cgallagher.gpo's domain_lab), kea_dhcp_msdns prepares
+# (create.yml, from git_cgallagher.windows' tests/domain_lab), kea_dhcp_msdns prepares
 # AD with its Windows backend (account, UPN, SPN, DnsUpdateProxy, zones,
 # ktpass keytab), kea_dhcp deploys Kea in an Amazon Linux 2023 x86-64
 # container, and verify checks that Kea's signed updates land in Microsoft DNS.

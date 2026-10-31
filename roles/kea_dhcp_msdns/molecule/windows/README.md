@@ -6,7 +6,7 @@ Molecule boots a Windows Server 2022 VM under QEMU/KVM and promotes it to the fi
 
 CI runs it **on demand only**, in [`.github/workflows/windows-dc.yml`](../../../../.github/workflows/windows-dc.yml); it takes about 15 minutes. It isn't a required check. It last passed on 2026-10-28 (PR #12). Re-run it after changing `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates.
 
-The VM boot (`create.yml`, `destroy.yml`) comes from `git_cgallagher.gpo`'s `domain_lab` scenario: the same pinned [`jborean93/WindowsServer2022`](https://portal.cloud.hashicorp.com/vagrant/discover/jborean93/WindowsServer2022) 1.2.0 evaluation box, the same first-boot wait, and the same PSRP/NTLM connection as `vagrant`.
+The VM boot (`create.yml`, `destroy.yml`) comes from [`git_cgallagher.windows`](https://github.com/git-cgallagher/ansible-collection-windows)' `tests/domain_lab` lab (formerly `git_cgallagher.gpo`'s `domain_lab` scenario): the same pinned [`jborean93/WindowsServer2022`](https://portal.cloud.hashicorp.com/vagrant/discover/jborean93/WindowsServer2022) 1.2.0 evaluation box, the same first-boot wait, and the same PSRP/NTLM connection as `vagrant`.
 
 ## What it proves
 
