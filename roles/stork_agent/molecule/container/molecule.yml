@@ -8,7 +8,7 @@
 dependency:
   name: galaxy
   options:
-    requirements-file: requirements.yml
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/../../requirements.yml
 driver:
   name: docker
 platforms:
@@ -43,7 +43,7 @@ provisioner:
   name: ansible
   env:
     # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
-    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/collections:~/.ansible/collections
+    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/../../.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/../../collections:~/.ansible/collections
   inventory:
     group_vars:
       all:

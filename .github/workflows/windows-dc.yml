@@ -66,7 +66,7 @@ jobs:
       - name: Install Ansible, Molecule and the test collections
         run: |
           pip install ansible-core molecule pypsrp
-          ansible-galaxy collection install -r extensions/molecule/kea_dhcp_msdns_windows/requirements.yml
+          ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
 
       - name: Expose the checkout as git_cgallagher.isc
         run: |
@@ -77,7 +77,8 @@ jobs:
       # destroys it either way. A hang must become a failure so they run.
       - name: molecule test
         timeout-minutes: 85
-        run: molecule test -s kea_dhcp_msdns_windows --destroy=never
+        working-directory: roles/kea_dhcp_msdns
+        run: molecule test -s windows --destroy=never
 
       # nc needs -N and a timeout: the QEMU monitor keeps the socket open.
       - name: Capture the VM screen and the Kea log
@@ -104,4 +105,5 @@ jobs:
 
       - name: molecule destroy
         if: always()
-        run: molecule destroy -s kea_dhcp_msdns_windows
+        working-directory: roles/kea_dhcp_msdns
+        run: molecule destroy -s windows

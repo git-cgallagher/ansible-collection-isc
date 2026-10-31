@@ -23,7 +23,7 @@ kea_dhcp__dns_preset:
     # No prerequisites: Kea can't verify Microsoft DNS's GSS-TSIG signature on
     # an update's error response ("Packet was replayed in wrong direction"), so
     # every check-* mode fails as soon as a name already exists (found against
-    # Windows Server 2022 by the kea_dhcp_msdns_windows scenario). Kea still
+    # Windows Server 2022 by the kea_dhcp_msdns windows scenario). Kea still
     # writes DHCID records; Windows clients' own records carry none, which
     # check-with-dhcid would refuse to replace anyway.
     ddns-conflict-resolution-mode: no-check-with-dhcid

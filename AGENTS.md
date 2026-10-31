@@ -20,12 +20,14 @@ roles/kea_dhcp/          Kea DHCP (packages or Kubernetes); its README is the us
 roles/stork_*            Stork server, agent, package repository
 docker/                  Stork image Dockerfiles (ISC publishes none)
 examples/kea_dhcp/       ready-to-adapt Kea inventories
-extensions/molecule/kea_dhcp/       Kea package installs on 5 distros (no init: configs validated, services not started)
-extensions/molecule/kea_dhcp_dns/ Kea DDNS end to end: MIT KDC + BIND 9, bind9-gss-tsig and rfc2136
-extensions/molecule/kea_dhcp_msdns/ kea_dhcp_msdns on Samba AD + Kea ms-dns: kinit and GSS-TSIG key exchange
-extensions/molecule/kea_dhcp_container/ Kea container mode: systemd + Docker in the node, Kea 3.0 and 2.6 + ctrl-agent
-extensions/molecule/kea_dhcp_ha3/   Kea 3-node HA (primary + standby + backup): starts Kea, checks states + failover
-extensions/molecule/stork/          Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
+roles/kea_dhcp/molecule/default/    Kea package installs on 7 platforms (no init: configs validated, services not started)
+roles/kea_dhcp/molecule/ha3/        Kea 3-node HA (primary + standby + backup): starts Kea, checks states + failover
+roles/kea_dhcp/molecule/container/  Kea container mode: systemd + Docker in the node, Kea 3.0 and 2.6 + ctrl-agent
+roles/kea_dhcp/molecule/dns/        Kea DDNS end to end: MIT KDC + BIND 9, bind9-gss-tsig and rfc2136
+roles/kea_dhcp_msdns/molecule/default/  kea_dhcp_msdns on Samba AD + Kea ms-dns: kinit and GSS-TSIG key exchange
+roles/kea_dhcp_msdns/molecule/windows/  real Windows Server 2022 DC + Microsoft DNS (KVM; manual windows-dc workflow)
+roles/stork_server/molecule/default/    Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
+roles/stork_agent/molecule/container/   Stork on AL2023: server from packages, agent in a container next to containerised Kea
 tests/kea_dhcp/          render 8 Kea deployment shapes + `kea -t` in ISC 2.6/3.0/3.2 images
 docs/                    stork-research, stork-kubernetes, testing, kea_dhcp-changelog-standalone
 ```
@@ -38,13 +40,15 @@ mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../
 ansible-lint && yamllint .          # production profile, must stay at 0
 tests/kea_dhcp/run.sh               # Kea render + kea -t (Docker; amd64 images)
 tests/argument_specs/run.sh         # every role: spec matches defaults, ansible-doc loads, bad input rejected
-molecule test -s kea_dhcp           # per distro in CI: --platform-name <name>
-molecule test -s kea_dhcp_ha3       # 3-node HA states + failover
-molecule test -s kea_dhcp_dns       # DDNS: GSS-TSIG + TSIG updates land in BIND
-molecule test -s kea_dhcp_msdns     # AD side (Samba) + Kea Kerberos/TKEY
-molecule test -s kea_dhcp_msdns_windows  # real Windows DC + Microsoft DNS (Linux+KVM only; CI: manual windows-dc workflow)
-molecule test -s kea_dhcp_container # container mode (native-arch nodes; dockerd crashes under QEMU)
-molecule test -s stork
+# Molecule runs from the role directory (scenarios live in roles/<role>/molecule/):
+(cd roles/kea_dhcp && molecule test -s default)    # per platform in CI: --platform-name <name>
+(cd roles/kea_dhcp && molecule test -s ha3)        # 3-node HA states + failover
+(cd roles/kea_dhcp && molecule test -s dns)        # DDNS: GSS-TSIG + TSIG updates land in BIND
+(cd roles/kea_dhcp && molecule test -s container)  # container mode (native-arch nodes; dockerd crashes under QEMU)
+(cd roles/kea_dhcp_msdns && molecule test -s default)  # AD side (Samba) + Kea Kerberos/TKEY
+(cd roles/kea_dhcp_msdns && molecule test -s windows)  # real Windows DC + Microsoft DNS (Linux+KVM only; CI: manual windows-dc workflow)
+(cd roles/stork_server && molecule test -s default)
+(cd roles/stork_agent && molecule test -s container)
 ```
 
 Sanity needs an `ansible_collections/git_cgallagher/isc` checkout:
@@ -65,7 +69,7 @@ with `_` or containing `__` are internal and exempt.
 1. In the PR, bump `version` in `galaxy.yml` (semver) and add a
    `## <version>` entry to `CHANGELOG.md`. The **`version-bump`** check in
    `ansible-test.yml` fails any PR that changes shipped files (anything not
-   in `build_ignore`, `tests/` or `extensions/molecule/`) without both. PRs that only
+   in `build_ignore`, `tests/` or `roles/*/molecule/`) without both. PRs that only
    touch CI, tests or `AGENTS.md` need no bump.
 2. Merge. When `ansible-test` goes green on `main`, **`release.yml`**:
    - builds the collection;
@@ -135,9 +139,17 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   renders itself as `0.0.0.0` and its partner as the partner's ClusterIP (verified live in
   Docker: both peers reach HOT-STANDBY).
 
-- Molecule scenarios live in `extensions/molecule/<scenario>` (the layout `ansible-creator` scaffolds
-  for collections). Molecule detects the collection and finds them there; run them from the repo
-  root by name (`molecule test -s kea_dhcp`). `MOLECULE_PROJECT_DIRECTORY` stays the repo root.
+- Molecule scenarios live **with their role**, in `roles/<role>/molecule/<scenario>` (owner's
+  choice, 2026-10-31; 1.3.1–1.6.1 used the collection-level `extensions/molecule/`). Run them from
+  the role directory. `MOLECULE_PROJECT_DIRECTORY` is then the role, so each `molecule.yml` reaches
+  the repo root as `${MOLECULE_PROJECT_DIRECTORY}/../..` (collections path, `requirements.yml`,
+  `docker/`). A scenario that exercises several roles lives under the role it mainly tests
+  (`kea_dhcp_msdns/molecule/default` also deploys `kea_dhcp`). `galaxy.yml` `build_ignore` has
+  `roles/*/molecule`, so scenarios never ship to Galaxy; CI job names are unchanged, so the
+  ruleset's required checks didn't change.
+- ansible-lint treats `register:` names in `roles/<role>/molecule/` playbooks as role variables
+  (`var-naming[no-role-prefix]`). `.ansible-lint-ignore` skips that one rule per scenario file; a new
+  scenario file that registers variables needs a line there. The rule still applies to role code.
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
@@ -152,7 +164,7 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
     - `win_powershell` reports `changed` unless the script sets `$Ansible.Changed = $false`.
     - `no_log` also censors the error. The Windows tasks register with `failed_when: false` and fail in a following assert that shows the PowerShell error with the password masked.
     - The domain's password complexity rejects a password containing the account name (`kea`).
-    - `kea_dhcp_msdns_windows` runs only on Linux with `/dev/kvm` (the GitHub runner), not on a Mac. It reaches the DC through QEMU user-mode port forwards on 127.0.0.1 (5985, 15353→53, 18088→88), so Kea's config uses `servers[].port` and `kdcs: ['127.0.0.1:18088']`.
+    - `kea_dhcp_msdns/molecule/windows` runs only on Linux with `/dev/kvm` (the GitHub runner), not on a Mac. It reaches the DC through QEMU user-mode port forwards on 127.0.0.1 (5985, 15353→53, 18088→88), so Kea's config uses `servers[].port` and `kdcs: ['127.0.0.1:18088']`.
   - Keytabs are binary: in Kubernetes they go through `slurp` into the Secret's `data`, never `stringData` or text lookups.
   - Presets live in `vars/dns/<integration>.yml` as one internal dict, `kea_dhcp__dns_preset`, so it never outranks `kea_dhcp_dns`.
 - Test nodes: `debian:12` has no `pgrep` (install `procps`); AL2023 has no `setsid` (use Ansible async); `dig` segfaults under QEMU (query from a native node).

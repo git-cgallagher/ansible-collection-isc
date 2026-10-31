@@ -354,22 +354,23 @@ tests/kea_dhcp/run.sh
 `tests/kea_dhcp/run.sh` renders 8 deployment shapes (14 instances) without a cluster and runs every generated config through `kea-<daemon> -t` in the ISC 2.6.5, 3.0.4 and 3.2.1 images. The `-t` check loads hook libraries, so it catches wrong HA keys or library paths.
 
 ```bash
-molecule test -s kea_dhcp
+cd roles/kea_dhcp    # in a checkout of the collection
+molecule test -s default
 ```
 
-`molecule test -s kea_dhcp` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Amazon Linux 2023 (standard and minimal), Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
+`molecule test -s default` installs from packages on Debian 12, Ubuntu 24.04, Rocky 9, Amazon Linux 2023 (standard and minimal), Alpine 3.20 (ISC) and Alpine 3.22 (distro) in containers. It then checks idempotence and re-validates the configs on each host. There's no init system in the containers, so starting services isn't covered by this test.
 
 ```bash
-molecule test -s kea_dhcp_ha3
+molecule test -s ha3
 ```
 
 ```bash
-molecule test -s kea_dhcp_container
+molecule test -s container
 ```
 
-`molecule test -s kea_dhcp_container` runs container mode on two test nodes that each have systemd and their own Docker engine: Kea 3.0, and Kea 2.6 with its control agent. It checks that the units are running, that Kea answers `status-get` over its HTTP API (on 2.6 through the control agent and the shared socket), and that it answers again after the unit restarts.
+`molecule test -s container` runs container mode on two test nodes that each have systemd and their own Docker engine: Kea 3.0, and Kea 2.6 with its control agent. It checks that the units are running, that Kea answers `status-get` over its HTTP API (on 2.6 through the control agent and the shared socket), and that it answers again after the unit restarts.
 
-`molecule test -s kea_dhcp_ha3` builds a three-node primary + standby + backup cluster on Debian 12, with Kea 3.0 from ISC's packages. It starts Kea on each node and checks that kea1 and kea2 reach `hot-standby` and kea3 reaches `backup`. It then stops the primary and checks that the standby takes over (`partner-down`) while the backup stays passive.
+`molecule test -s ha3` builds a three-node primary + standby + backup cluster on Debian 12, with Kea 3.0 from ISC's packages. It starts Kea on each node and checks that kea1 and kea2 reach `hot-standby` and kea3 reaches `backup`. It then stops the primary and checks that the standby takes over (`partner-down`) while the backup stays passive.
 
 The Kubernetes path was also applied to a live 3-node kind cluster, in both the Talos-style host-network shape and the EKS-style service shape. Both HA pairs reached `HOT-STANDBY`, re-runs were idempotent, and removal worked. A Kea 2.6 HA pair running over an authenticated control agent was also run live from the role's output and reached `HOT-STANDBY`.
 
