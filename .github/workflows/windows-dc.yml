@@ -65,7 +65,9 @@ jobs:
 
       - name: Install Ansible, Molecule and the test collections
         run: |
-          pip install ansible-core molecule pypsrp
+          # molecule-plugins[docker]: Molecule loads every scenario in the role's
+          # molecule/ dir, and the sibling `default` scenario uses the docker driver.
+          pip install ansible-core molecule pypsrp 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
 
       - name: Expose the checkout as git_cgallagher.isc

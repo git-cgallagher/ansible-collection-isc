@@ -150,6 +150,9 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - ansible-lint treats `register:` names in `roles/<role>/molecule/` playbooks as role variables
   (`var-naming[no-role-prefix]`). `.ansible-lint-ignore` skips that one rule per scenario file; a new
   scenario file that registers variables needs a line there. The rule still applies to role code.
+- Molecule loads **every** scenario in a role's `molecule/` dir, so a job needs every driver its
+  siblings use: `windows-dc` installs `molecule-plugins[docker]` although `windows` itself uses the
+  default driver ("Failed to find driver docker" otherwise).
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
