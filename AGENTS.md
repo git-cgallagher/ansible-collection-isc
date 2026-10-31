@@ -6,7 +6,7 @@ and `stork_repository`. Public repo `git-cgallagher/ansible-collection-isc`,
 published to Galaxy as `git_cgallagher.isc`.
 
 It **replaces** the standalone role `git-cgallagher.kea_dhcp` (repo
-`ansible-role-kea-dhcp`, archived), whose full git history is merged in under
+`ansible-role-kea-dhcp`, deleted 2026-10-31), whose full git history is merged in under
 `roles/kea_dhcp`. Work on branches and PRs; `main` is protected.
 
 ⚠️ Other sessions may use `~/Code/ansible-collection-isc` at the same time:
