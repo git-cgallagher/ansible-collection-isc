@@ -6,7 +6,7 @@ and `stork_repository`. Public repo `git-cgallagher/ansible-collection-isc`,
 published to Galaxy as `git_cgallagher.isc`.
 
 It **replaces** the standalone role `git-cgallagher.kea_dhcp` (repo
-`ansible-role-kea-dhcp`, archived), whose full git history is merged in under
+`ansible-role-kea-dhcp`, deleted 2026-10-31), whose full git history is merged in under
 `roles/kea_dhcp`. Work on branches and PRs; `main` is protected.
 
 ⚠️ Other sessions may use `~/Code/ansible-collection-isc` at the same time:
@@ -71,6 +71,11 @@ with `_` or containing `__` are internal and exempt.
    `ansible-test.yml` fails any PR that changes shipped files (anything not
    in `build_ignore`, `tests/` or `roles/*/molecule/`) without both. PRs that only
    touch CI, tests or `AGENTS.md` need no bump.
+   **Docs ship too.** The job's `ignore` regex (the source of truth) skips only
+   `.github/`, `roles/*/molecule/`, `tests/`, `AGENTS.md`, `.ansible-lint`,
+   `.ansible-lint-ignore`, `.yamllint` and `.gitignore`. Everything else counts
+   as shipped: `README.md`, `CHANGELOG.md`, `docs/`, role READMEs. So even a
+   typo fix there needs a version bump and publishes a new Galaxy release.
 2. Merge. When `ansible-test` goes green on `main`, **`release.yml`**:
    - builds the collection;
    - publishes it to Galaxy if that version isn't there (secret
@@ -158,6 +163,12 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
   accessible by integration". Galaxy still gets the version, but the GitHub release is lost (1.3.1,
   2026-10-28). Wait for the release run to go green before the next merge.
+- **Every CI `pip install` uses `.github/ci/requirements.txt` as constraints** (2026-10-31). It
+  caps ansible-core to the sanity matrix's range (`>=2.18,<2.22`) and pins the tools. Before it,
+  only the two Stork Molecule jobs carried the cap (inherited from the first Stork commit), so the
+  other jobs would have moved to 2.22 the day it shipped. When a new minor ships, raise the cap and
+  extend the sanity and argument-specs matrices in one PR; Dependabot bumps the tool pins monthly
+  but ignores ansible-core. `release.yml` and `argument-specs.yml` install their own ansible-core.
 - **GSS-TSIG / AD (learned 2026-10-28):**
   - The AD account's **UPN must equal Kea's client principal**: AD only issues TGTs to UPNs. `ktpass -mapuser` does it on Windows; Samba needs `ldbmodify` (`ldb-tools`). The symptom is `GSS_TSIG_NEW_KEY_SETUP_FAILED ... bad client credentials`, and `kinit -k -t <keytab> <principal>` gives a one-line diagnosis.
   - `client-keytab` alone is enough; no credentials cache is needed.
@@ -267,7 +278,7 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## TODO / follow-ups
 
-- Re-run the manual `windows-dc` workflow after changes to `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates (last green: 2026-10-28). It's untested on Windows Server 2025 and on a real multi-DC domain.
+- Re-run the manual `windows-dc` workflow after changes to `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates; `gh run list --workflow windows-dc.yml --repo git-cgallagher/ansible-collection-isc` shows when it last passed. It's untested on Windows Server 2025 and on a real multi-DC domain.
 - Automate the Stork sidecar live test, which was done by hand in 1.4.0 (see
   `docs/testing.md`). It needs a k3s or kind job with amd64 Kea images, so an
   amd64 CI runner.

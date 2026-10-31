@@ -5,11 +5,12 @@ name: windows-dc
 # runner, kea_dhcp_msdns prepares AD with its Windows backend, and Kea in an
 # AL2023 x86-64 container sends GSS-TSIG signed updates to it.
 #
-# Manual only (validated green 2026-10-28 on PR #12, run 40717463922): it takes
-# ~15 min and depends on a third-party box download, so it isn't a PR or
-# required check. Run it after changing kea_dhcp_msdns, the ms-dns preset or
-# the DDNS templates:
+# Manual only: it takes ~15 min and depends on a third-party box download, so
+# it isn't a PR or required check. Run it after changing kea_dhcp_msdns, the
+# ms-dns preset or the DDNS templates:
 #   gh workflow run windows-dc.yml --repo git-cgallagher/ansible-collection-isc --ref <branch>
+# For when it last passed, see the run history:
+#   gh run list --workflow windows-dc.yml --repo git-cgallagher/ansible-collection-isc
 # To validate a branch before this file is on main, add a temporary
 # pull_request trigger (how PR #12 ran it).
 
@@ -19,7 +20,7 @@ on:
 permissions:
   contents: read
 
-# A new push to the same PR supersedes the run in flight.
+# A second dispatch on the same ref cancels the run in flight.
 concurrency:
   group: windows-dc-${{ github.ref }}
   cancel-in-progress: true
@@ -65,9 +66,10 @@ jobs:
 
       - name: Install Ansible, Molecule and the test collections
         run: |
+          # Versions come from the shared CI constraints file (see its header).
           # molecule-plugins[docker]: Molecule loads every scenario in the role's
           # molecule/ dir, and the sibling `default` scenario uses the docker driver.
-          pip install ansible-core molecule pypsrp 'molecule-plugins[docker]' docker
+          pip install -c .github/ci/requirements.txt ansible-core molecule pypsrp 'molecule-plugins[docker]' docker
           ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
 
       - name: Expose the checkout as git_cgallagher.isc

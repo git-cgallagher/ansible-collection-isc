@@ -4,7 +4,7 @@ Molecule boots a Windows Server 2022 VM under QEMU/KVM and promotes it to the fi
 - `kea_dhcp_msdns` prepares AD with its **Windows backend**: the service account, UPN, SPN, DnsUpdateProxy, reverse zone, and the `ktpass` keytab.
 - `kea_dhcp` deploys Kea with `kea_dhcp_dns_integration: ms-dns` in an Amazon Linux 2023 x86-64 container.
 
-CI runs it **on demand only**, in [`.github/workflows/windows-dc.yml`](../../../../.github/workflows/windows-dc.yml); it takes about 15 minutes. It isn't a required check. It last passed on 2026-10-28 (PR #12). Re-run it after changing `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates.
+CI runs it **on demand only**, in [`.github/workflows/windows-dc.yml`](../../../../.github/workflows/windows-dc.yml); it takes about 15 minutes. It isn't a required check. For when it last passed, see `gh run list --workflow windows-dc.yml --repo git-cgallagher/ansible-collection-isc`. Re-run it after changing `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates.
 
 The VM boot (`create.yml`, `destroy.yml`) comes from `git_cgallagher.gpo`'s `domain_lab` scenario: the same pinned [`jborean93/WindowsServer2022`](https://portal.cloud.hashicorp.com/vagrant/discover/jborean93/WindowsServer2022) 1.2.0 evaluation box, the same first-boot wait, and the same PSRP/NTLM connection as `vagrant`.
 
