@@ -47,4 +47,6 @@
         apply: { delegate_to: localhost, run_once: true, become: false }
       vars:
         _api: "{{ stork_server_k8s_api_url | regex_replace('/$', '') }}/api"
+        _validate_certs: "{{ stork_server_k8s_api_validate_certs | bool }}"
+        _ca_path: "{{ stork_server_k8s_api_ca_path }}"
       when: stork_server_k8s_state == 'present' and stork_server_k8s_apply | bool and stork_server_k8s_api_url | length > 0

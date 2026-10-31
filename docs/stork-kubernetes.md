@@ -7,9 +7,14 @@ Secret, Service and a single-replica Deployment from the control node. It
 needs an image (`docker/Dockerfile.stork-server`) and an external PostgreSQL
 with `pgcrypto`: RDS on EKS, CloudNativePG or similar on Talos.
 
-To rotate the `admin`/`admin` bootstrap password, set
+The role replaces the `admin`/`admin` bootstrap password, so it requires
 `stork_server_admin_password` and a `stork_server_k8s_api_url` the control
-node can reach (ingress, LoadBalancer, or `kubectl port-forward`). The
+node can reach (ingress, LoadBalancer, or `kubectl port-forward`). It checks
+that URL's TLS certificate, because the rotation sends both passwords: set
+`stork_server_k8s_api_ca_path` for a private CA, and
+`stork_server_k8s_api_validate_certs: false` only for an `http://`
+port-forward or a lab. To skip the rotation on purpose, set
+`stork_server_allow_bootstrap_admin: true`. The
 password must meet Stork's policy (12+ characters, upper and lower case, a
 digit, a special character or space). If it doesn't, the run fails with
 Stork's reason.

@@ -13,6 +13,24 @@
       stork_server_db_host.
     quiet: true
 
+# Without a new password Stork keeps admin/admin on a listener that defaults
+# to every interface over plain HTTP.
+- name: Check the admin password
+  ansible.builtin.assert:
+    that:
+      - stork_server_admin_password | length > 0
+      - stork_server_admin_password != stork_server_admin_bootstrap_password
+      - stork_server_deploy_mode != 'kubernetes' or stork_server_k8s_state == 'absent'
+        or not (stork_server_k8s_apply | bool) or stork_server_k8s_api_url | length > 0
+    fail_msg: >-
+      Set stork_server_admin_password (vault it; Stork needs 12+ characters with
+      upper and lower case, a digit and a special character or space) so the role
+      replaces the admin/admin bootstrap password. Kubernetes mode also needs
+      stork_server_k8s_api_url for the rotation. To keep the bootstrap password
+      on purpose, set stork_server_allow_bootstrap_admin: true.
+    quiet: true
+  when: not (stork_server_allow_bootstrap_admin | bool)
+
 - name: Deploy on this host
   ansible.builtin.include_tasks: package.yml
   when: stork_server_deploy_mode == 'package'

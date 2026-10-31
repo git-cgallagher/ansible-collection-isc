@@ -18,7 +18,7 @@ which is retired. See [Migrating](#migrating).
 
 | | Versions |
 |---|---|
-| ansible-core | 2.16+ (CI: 2.18, 2.19, 2.20, 2.21) |
+| ansible-core | 2.18+ (CI: 2.18, 2.19, 2.20, 2.21) |
 | ISC Kea | 3.0 (LTS, default), 3.2, 2.6 (EOL, existing estates only) |
 | ISC Stork | 2.6 |
 | Platforms | Debian 12/13, Ubuntu 22.04/24.04, RHEL/Rocky/Alma 8–10, Fedora, Amazon Linux 2023 (Stork), Alpine 3.20+ |

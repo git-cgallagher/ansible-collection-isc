@@ -4,7 +4,7 @@ argument_specs:
     short_description: ISC Stork server from packages or on Kubernetes
     description:
       - Installs and configures the Stork server, optionally with a local PostgreSQL.
-      - Rotates the admin/admin bootstrap password when stork_server_admin_password is set.
+      - Replaces the admin/admin bootstrap password with stork_server_admin_password, which is required unless stork_server_allow_bootstrap_admin is true.
     author:
       - Chris Gallagher
     options:
@@ -59,11 +59,14 @@ argument_specs:
       stork_server_admin_password:
         type: str
         no_log: true
-        description: New admin password; the role replaces the bootstrap one. Must meet Stork's policy. Empty = no rotation.
+        description: New admin password, replacing the bootstrap one. Must meet Stork's policy. Required unless stork_server_allow_bootstrap_admin is true.
       stork_server_admin_bootstrap_password:
         type: str
         no_log: true
         description: Password Stork boots with.
+      stork_server_allow_bootstrap_admin:
+        type: bool
+        description: Skip the admin password check and leave the bootstrap password in place. Only when it is changed some other way.
       stork_server_k8s_namespace:
         type: str
         description: Namespace for the server objects.
@@ -101,4 +104,10 @@ argument_specs:
         description: Container resources (requests/limits).
       stork_server_k8s_api_url:
         type: str
-        description: URL the control node uses for the password rotation in Kubernetes. Empty = skip the rotation.
+        description: URL the control node uses for the password rotation in Kubernetes. Required unless stork_server_allow_bootstrap_admin is true.
+      stork_server_k8s_api_validate_certs:
+        type: bool
+        description: Verify the API's TLS certificate during the password rotation. Turn off only for an http port-forward or a lab.
+      stork_server_k8s_api_ca_path:
+        type: str
+        description: CA bundle for verifying stork_server_k8s_api_url. Empty = the control node's trust store.

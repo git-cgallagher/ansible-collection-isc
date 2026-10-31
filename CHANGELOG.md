@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.0 — 2026-10-31
+
+Secure defaults for `stork_server`. **Breaking:** plays that relied on the old
+defaults now fail at the input check, with a message saying what to set.
+
+- **`stork_server_admin_password` is required.** Before, an empty password left
+  Stork on `admin`/`admin`, listening on every interface over plain HTTP by
+  default. The role now fails unless the password is set (and differs from
+  `stork_server_admin_bootstrap_password`). Set the new
+  `stork_server_allow_bootstrap_admin: true` to keep the old behaviour, for
+  example when the password is changed by hand or logins use OIDC.
+- **Kubernetes mode requires `stork_server_k8s_api_url`** (unless
+  `stork_server_allow_bootstrap_admin` is true, the state is `absent`, or
+  `stork_server_k8s_apply` is false), so the rotation can't be skipped
+  without anyone noticing.
+- **The Kubernetes password change checks the API's TLS certificate.** It used
+  to send both admin passwords to `stork_server_k8s_api_url` with certificate
+  checks off. New `stork_server_k8s_api_validate_certs` (default `true`) and
+  `stork_server_k8s_api_ca_path` (a private CA bundle). A self-signed ingress
+  now needs the CA, or `stork_server_k8s_api_validate_certs: false`. Package
+  mode still skips the check, because its call only goes to `127.0.0.1`.
+- **`requires_ansible` is now `>=2.18.0`** (was `>=2.16.0`). CI has only
+  tested 2.18–2.21, and ansible-core 2.16 and 2.17 are end of life.
+
 ## 1.6.2 — 2026-10-31
 
 No role behaviour changes.

@@ -3,7 +3,7 @@
 Installs and configures the [ISC Stork](https://stork.readthedocs.io/)
 server, either on a host from ISC's packages or in Kubernetes as a
 single-replica Deployment. It can also bootstrap a local PostgreSQL, and it
-rotates the `admin`/`admin` bootstrap password.
+replaces the `admin`/`admin` bootstrap password (a new one is required).
 
 ## Requirements
 
@@ -37,11 +37,13 @@ main ones:
 | `stork_server_db_host` / `_port` / `_name` / `_user` | `localhost` / `5432` / `stork` / `stork` | Database |
 | `stork_server_db_password` | `""` | **Required.** Vault it. |
 | `stork_server_db_sslmode` | `disable` locally, else `require` | |
-| `stork_server_admin_password` | `""` | When set, replaces the `admin`/`admin` bootstrap password. Stork's default policy needs 12+ characters with upper and lower case letters, a digit and a special character or space. A refused password fails the run with Stork's reason. |
+| `stork_server_admin_password` | `""` | **Required.** Replaces the `admin`/`admin` bootstrap password. Stork's default policy needs 12+ characters with upper and lower case letters, a digit and a special character or space. A refused password fails the run with Stork's reason. |
+| `stork_server_allow_bootstrap_admin` | `false` | `true` skips that requirement and leaves `admin`/`admin` in place. Only when the password is changed some other way. |
 | `stork_server_k8s_image` | `""` | **Required** in Kubernetes mode |
 | `stork_server_k8s_namespace` | `stork` | Created unless `stork_server_k8s_create_namespace: false` |
 | `stork_server_k8s_service_type` | `ClusterIP` | |
-| `stork_server_k8s_api_url` | `""` | URL the control node uses for the password rotation in Kubernetes |
+| `stork_server_k8s_api_url` | `""` | **Required** in Kubernetes mode: URL the control node uses for the password rotation |
+| `stork_server_k8s_api_validate_certs` / `_ca_path` | `true` / `""` | Verify that URL's certificate (the rotation sends the admin passwords); `_ca_path` for a private CA |
 | `stork_server_k8s_state` | `present` | `absent` removes everything |
 
 ## Dependencies

@@ -27,10 +27,13 @@ stork_server_db_user: stork
 stork_server_db_password: ""   # REQUIRED — vault it
 stork_server_db_sslmode: "{{ 'disable' if (stork_server_db_install_local | bool) else 'require' }}"
 
-# Stork boots with admin/admin. Set a password to have the role rotate it.
+# Stork boots with admin/admin. The role requires a new password and rotates
+# the bootstrap one, unless stork_server_allow_bootstrap_admin is true (for
+# example when someone changes it by hand or logins go through OIDC).
 stork_server_admin_user: admin
-stork_server_admin_password: ""   # vault it
+stork_server_admin_password: ""   # REQUIRED — vault it
 stork_server_admin_bootstrap_password: admin
+stork_server_allow_bootstrap_admin: false
 
 # --- kubernetes mode ---
 stork_server_k8s_namespace: stork
@@ -47,5 +50,11 @@ stork_server_k8s_resources:
   requests: { cpu: 50m, memory: 128Mi }
   limits: { memory: 512Mi }
 # URL the CONTROL NODE uses to reach the API for the password rotation
-# (ingress, LoadBalancer or a port-forward). Empty = skip the rotation.
+# (ingress, LoadBalancer or a port-forward). Required unless
+# stork_server_allow_bootstrap_admin is true.
 stork_server_k8s_api_url: ""
+# Verify the API's TLS certificate during the rotation, which sends the admin
+# passwords. Set a CA bundle for a private CA; turn verification off only for
+# an http:// port-forward or a lab.
+stork_server_k8s_api_validate_certs: true
+stork_server_k8s_api_ca_path: ""
