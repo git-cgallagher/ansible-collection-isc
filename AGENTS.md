@@ -259,6 +259,15 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   `Cannot store machine … duplicate key`. The sidecar exits and the kubelet
   restarts it. Diagnose it from the server log; the line must not be cut at
   400 characters, because the DB error comes after the struct dump.
+- **`stork_server` has secure defaults since 2.0.0** (PR #15): it fails
+  at the input check unless `stork_server_admin_password` is set (and differs
+  from the bootstrap `admin`), and Kubernetes mode also needs
+  `stork_server_k8s_api_url` so the rotation can't be skipped silently. The
+  k8s password change verifies the API's certificate
+  (`stork_server_k8s_api_validate_certs`, `stork_server_k8s_api_ca_path`).
+  Every scenario, example and live test that deploys the server must set a
+  password; `stork_server_allow_bootstrap_admin: true` is the explicit opt-out
+  (manual rotation or OIDC), not a test shortcut.
 - **Stork's admin password policy** (2.6 default): 12+ characters, upper and
   lower case, a digit and a special character or space. `stork_server`
   reports Stork's message when it refuses one. Never reuse a test password
