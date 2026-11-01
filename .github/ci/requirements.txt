@@ -1,6 +1,7 @@
-# pip constraints for every CI job in ansible-test.yml and windows-dc.yml:
-# `pip install -c .github/ci/requirements.txt <packages>`, or the `constraints`
-# input of the setup-molecule action, which the Molecule jobs use.
+# pip constraints for windows-dc.yml (the setup-molecule action's `constraints`
+# input) and for installing the tools locally. ansible-test.yml's lint, render
+# and Molecule jobs don't use it: they run in the ansible-runtime image, which
+# pins the same tools (see AGENTS.md). Keep these at the image's versions.
 # Each job still names its own packages; this file only fixes their versions,
 # so all jobs run the same tools. The molecule-git-cgallagher driver isn't
 # here: the action's pinned SHA versions it.

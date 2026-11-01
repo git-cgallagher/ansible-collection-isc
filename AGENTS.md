@@ -36,6 +36,18 @@ docs/                    stork-research, stork-kubernetes, testing, kea_dhcp-cha
 
 ## Checks (all must pass before a change is done)
 
+Easiest: run them in the same image CI uses, through the wrapper (needs Docker). It has every
+tool, the Molecule driver and the third-party collections, so nothing to install:
+
+```bash
+export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
+.github/ci/runtime.sh ansible-lint
+.github/ci/runtime.sh tests/kea_dhcp/run.sh
+(cd roles/kea_dhcp && ../../.github/ci/runtime.sh molecule test -s default --platform-name kea-debian12)
+```
+
+Or install the tools yourself:
+
 ```bash
 # The tools at CI's versions, plus the Molecule driver and its collection (one tag for both):
 pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint molecule \
@@ -174,17 +186,29 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   new keys against the driver's README. Molecule loads every scenario in a role's `molecule/` dir,
   which is why a single driver matters: the old mixed drivers made `windows-dc` install
   molecule-plugins for a scenario it never ran.
-- **CI installs Molecule through the `setup-molecule` action**, pinned by SHA with a `# vX.Y.Z`
-  comment (Dependabot bumps it), under `.github/ci/requirements.txt` via its `constraints` input.
-  The lint job doesn't need it: ansible-lint passes without `git_cgallagher.molecule` (it doesn't
-  resolve the Windows scenario's dynamic `include_role` of `ad_forest`; checked 2026-10-31 with only
-  `requirements.yml`'s collections installed).
+- **lint, the Kea render and every Molecule job run in the ansible-runtime image** (2026-11-01),
+  `ghcr.io/git-cgallagher/ansible-runtime:<X.Y.Z>-ci@sha256:…` in `ansible-test.yml`'s
+  `RUNTIME_IMAGE`, through `.github/ci/runtime.sh`. The image pins ansible-core, the tools, the
+  Molecule driver and the third-party collections (its repo's `DEPENDENCIES.md` lists them); these
+  jobs install nothing. Bump the tag and digest together, to an ansible-runtime release whose
+  `consumers` job passed against isc. The `-ci` image has no `git_cgallagher.isc`, so CI tests the
+  checkout.
+  - **`docker run`, not a `container:` job.** The wrapper mounts the checkout at the same path and
+    uses the runner's network. `tests/kea_dhcp/validate.py` bind-mounts rendered files into
+    `docker run`, and the Stork scenarios reach published ports on `127.0.0.1`: both break in a
+    `container:` job (checkout at `/__w`, its own network). It also puts `TMPDIR` under the
+    checkout (`.cache/tmp`), since files mounted into test containers must be on a path the host
+    daemon sees, and marks the checkout `safe.directory` (the image runs as root).
+  - **Still on `setup-molecule`:** `windows-dc.yml`, because its Windows VM needs KVM and QEMU on
+    the runner itself.
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
   accessible by integration". Galaxy still gets the version, but the GitHub release is lost (1.3.1,
   2026-10-28). Wait for the release run to go green before the next merge.
-- **Every CI `pip install` uses `.github/ci/requirements.txt` as constraints** (2026-10-31). It
+- **`.github/ci/requirements.txt` now only constrains `windows-dc.yml`** (and local installs);
+  the image pins everything else. Keep its ansible-core cap and tool pins at the image's versions.
+- **History: every CI `pip install` used `.github/ci/requirements.txt` as constraints** (2026-10-31). It
   caps ansible-core to the sanity matrix's range (`>=2.18,<2.22`) and pins the tools. Before it,
   only the two Stork Molecule jobs carried the cap (inherited from the first Stork commit), so the
   other jobs would have moved to 2.22 the day it shipped. When a new minor ships, raise the cap and

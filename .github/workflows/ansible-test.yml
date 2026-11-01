@@ -13,13 +13,17 @@ on:
 permissions:
   contents: read
 
-# Every pip install below uses .github/ci/requirements.txt as constraints
-# (setup-molecule's `constraints` input in the Molecule jobs), so all jobs run
-# the same ansible-core (capped to the sanity matrix's range) and tool
-# versions. The sanity job installs its own ansible-core via the action.
+# lint, the Kea render and every Molecule job run in the ansible-runtime image
+# (.github/ci/runtime.sh): one pinned ansible-core, ansible-lint, yamllint,
+# Molecule + the molecule-git-cgallagher driver, Python libraries and
+# third-party collections, the same image `bin/ar` runs locally. They install
+# nothing. The `-ci` image carries no git_cgallagher.isc, so they test this
+# checkout. Bump the tag AND digest together, to an ansible-runtime release.
+# The sanity job installs its own ansible-core via the action, across versions.
 env:
   PY_COLORS: '1'
   ANSIBLE_FORCE_COLOR: '1'
+  RUNTIME_IMAGE: ghcr.io/git-cgallagher/ansible-runtime:0.2.0-ci@sha256:9f36cb0ddd49251df1eef32142f08176018fe91c10a1c2f2a15dd5442b3bc572
 
 jobs:
   # Every merge to main is released (release.yml), so a PR that changes
@@ -77,14 +81,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
-        with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint
-          ansible-galaxy collection install -r requirements.yml
-      - run: yamllint .
-      - run: ansible-lint
+      - run: .github/ci/runtime.sh yamllint .
+      - run: .github/ci/runtime.sh ansible-lint
 
   kea-render:
     # Renders 8 Kea deployment shapes without a cluster and checks every
@@ -95,13 +93,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
-        with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core pyyaml kubernetes
-          ansible-galaxy collection install -r requirements.yml
-      - run: tests/kea_dhcp/run.sh
+      - run: .github/ci/runtime.sh tests/kea_dhcp/run.sh
 
   molecule-kea:
     name: molecule kea_dhcp (${{ matrix.platform }})
@@ -114,13 +106,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
-        run: molecule test -s default --platform-name ${{ matrix.platform }}
+        run: ../../.github/ci/runtime.sh molecule test -s default --platform-name ${{ matrix.platform }}
 
   molecule-kea-ha3:
     # Three-node HA (primary + standby + backup) on Amazon Linux 2023 minimal:
@@ -131,13 +118,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
-        run: molecule test -s ha3
+        run: ../../.github/ci/runtime.sh molecule test -s ha3
 
   molecule-kea-container:
     # Container mode: AL2023 nodes with systemd + Docker, Kea under units.
@@ -147,13 +129,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
-        run: molecule test -s container
+        run: ../../.github/ci/runtime.sh molecule test -s container
 
   molecule-stork-container:
     # Stork on AL2023: server from packages, agent in a container next to
@@ -164,13 +141,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/stork_agent
-        run: molecule test -s container
+        run: ../../.github/ci/runtime.sh molecule test -s container
 
   molecule-kea-dhcp-dns:
     # DDNS end to end: MIT KDC + BIND 9, GSS-TSIG and TSIG updates.
@@ -180,13 +152,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
-        run: molecule test -s dns
+        run: ../../.github/ci/runtime.sh molecule test -s dns
 
   molecule-kea-dhcp-msdns:
     # AD side on Samba + Kea Kerberos/GSS-TSIG key exchange (ms-dns).
@@ -196,13 +163,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp_msdns
-        run: molecule test -s default
+        run: ../../.github/ci/runtime.sh molecule test -s default
 
   molecule-stork:
     name: molecule stork
@@ -211,13 +173,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/stork_server
-        run: molecule test -s default
+        run: ../../.github/ci/runtime.sh molecule test -s default
 
   molecule-bind9:
     # BIND from distro packages; named in the foreground, TSIG-signed updates land.
@@ -231,10 +188,5 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
-        with:
-          collection: git_cgallagher.isc
-          requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
       - working-directory: roles/bind9
-        run: molecule test -s default --platform-name ${{ matrix.platform }}
+        run: ../../.github/ci/runtime.sh molecule test -s default --platform-name ${{ matrix.platform }}
