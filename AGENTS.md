@@ -213,7 +213,7 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   `kea_dhcp_container` node is built from its Dockerfile for the host's own architecture, and the
   amd64 Kea images run inside it through binfmt (`kea_dhcp_container_platform: linux/amd64`).
 - **Amazon Linux 2023 on x86-64 is the owner's primary platform (2026-10-28).** Test it first and keep its
-  Molecule jobs (`kea-al2023`, `kea-al2023-min`, `kea_dhcp_ha3`, `kea_dhcp_container`, and from 1.5.0 `kea_dhcp_dns`, `kea_dhcp_msdns`) required in
+  Molecule jobs (`kea-al2023`, `kea-al2023-min`, `kea_dhcp_ha3`, `kea_dhcp_container`, from 1.5.0 `kea_dhcp_dns`, `kea_dhcp_msdns`, and from 2.1.0 `molecule bind9 (bind9-al2023)`) required in
   the `main protection` ruleset. EL packages name the Kea user `kea` (Debian: `_kea`).
 - Amazon Linux 2023: ISC's `amzn/2023` repos exist but are EMPTY (168-byte primary index), and AL2023
   ships no kea/log4cplus. The role maps AL2023 to ISC's `el/9` repo plus an EPEL 9 repo restricted to
