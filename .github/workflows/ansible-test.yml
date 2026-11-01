@@ -114,7 +114,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -164,7 +164,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -180,7 +180,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -196,7 +196,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -211,7 +211,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -231,7 +231,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
