@@ -6,7 +6,7 @@ Molecule boots a Windows Server 2022 VM under QEMU/KVM and promotes it to the fi
 
 CI runs it **on demand only**, in [`.github/workflows/windows-dc.yml`](../../../../.github/workflows/windows-dc.yml); it takes about 15 minutes. It isn't a required check. For when it last passed, see `gh run list --workflow windows-dc.yml --repo git-cgallagher/ansible-collection-isc`. Re-run it after changing `kea_dhcp_msdns`, the `ms-dns` preset or the DDNS templates.
 
-The VM boot (`create.yml`, `destroy.yml`) comes from `git_cgallagher.gpo`'s `domain_lab` scenario: the same pinned [`jborean93/WindowsServer2022`](https://portal.cloud.hashicorp.com/vagrant/discover/jborean93/WindowsServer2022) 1.2.0 evaluation box, the same first-boot wait, and the same PSRP/NTLM connection as `vagrant`.
+The VM comes from the `windows_vm` kind of the [`molecule-git-cgallagher`](https://github.com/git-cgallagher/ansible-collection-molecule) driver (collection `git_cgallagher.molecule`), and its promotion from that collection's `ad_forest` role. Both started as [`git_cgallagher.windows`](https://github.com/git-cgallagher/ansible-collection-windows)' `tests/domain_lab` lab (formerly `git_cgallagher.gpo`'s `domain_lab` scenario): the same pinned [`jborean93/WindowsServer2022`](https://portal.cloud.hashicorp.com/vagrant/discover/jborean93/WindowsServer2022) 1.2.0 evaluation box, the same first-boot wait, and the same PSRP/NTLM connection as `vagrant`.
 
 ## What it proves
 
@@ -33,15 +33,15 @@ The Kea container uses `--network host`, so its config points at `127.0.0.1:1535
 
 ## Running it
 
-You need Linux x86-64 with `/dev/kvm`, `qemu-system-x86_64` and `qemu-img`, Docker, about 20 GB free in `$KEA_LAB_DIR` (default `~/.cache/kea-domain-lab`), and ports 5985, 15353 and 18088 free on `127.0.0.1`. **It can't run on macOS or Apple Silicon.**
+You need Linux x86-64 with `/dev/kvm`, `qemu-system-x86_64` and `qemu-img`, Docker, about 20 GB free in `$MOLECULE_LAB_DIR` (default `~/.cache/molecule-lab`), and ports 5985, 15353 and 18088 free on `127.0.0.1`. **It can't run on macOS or Apple Silicon.**
 
 ```bash
-pip install ansible-core molecule pypsrp
-ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
+pip install ansible-core molecule "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.0"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.0
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher
 ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 cd roles/kea_dhcp_msdns
-KEA_LAB_DIR=/path/with/space molecule test -s windows
+MOLECULE_LAB_DIR=/path/with/space molecule test -s windows
 ```
 
 To run it in CI: `gh workflow run windows-dc.yml --repo git-cgallagher/ansible-collection-isc --ref <branch>`.

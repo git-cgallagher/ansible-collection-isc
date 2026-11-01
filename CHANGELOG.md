@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.1 — 2026-10-31
+
+No role behaviour changes.
+
+- **Molecule scenarios run on the shared `molecule-git-cgallagher` driver**
+  ([`git_cgallagher.molecule`](https://github.com/git-cgallagher/ansible-collection-molecule)
+  0.2.0) instead of molecule-plugins' docker driver, and the Windows DC
+  scenario's own create/destroy (290 lines) is gone. What the scenarios share is
+  in `.config/molecule/config.yml`; each `molecule.yml` keeps its platforms and
+  inventory. CI installs it all with the driver's `setup-molecule` action, still
+  under `.github/ci/requirements.txt`, which no longer pins `molecule-plugins`
+  or the `docker` SDK.
+- `galaxy.yml` `build_ignore` now lists `.config`, so that base config stays out
+  of the Galaxy tarball. That's why this is a release.
+- The Windows DC scenario keeps its box cache and VM disk in `$MOLECULE_LAB_DIR`
+  (was `$KEA_LAB_DIR`).
+
 ## 2.0.0 — 2026-10-31
 
 Secure defaults for `stork_server`. **Breaking:** plays that relied on the old

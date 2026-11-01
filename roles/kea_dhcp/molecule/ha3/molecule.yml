@@ -6,18 +6,10 @@
 # these run under emulation. The containers have no
 # init system, so verify.yml starts kea-dhcp4 by hand, then checks the HA
 # states and a real failover.
-dependency:
-  name: galaxy
-  options:
-    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/../../requirements.yml
-driver:
-  name: docker
 platforms:
   - name: kea1
     image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
-    command: sleep infinity
-    pre_build_image: true
     docker_networks: &kea_ha3_network
       - name: kea-ha3
         ipam_config:
@@ -29,8 +21,6 @@ platforms:
   - name: kea2
     image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
-    command: sleep infinity
-    pre_build_image: true
     docker_networks: *kea_ha3_network
     networks:
       - name: kea-ha3
@@ -38,30 +28,15 @@ platforms:
   - name: kea3
     image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
-    command: sleep infinity
-    pre_build_image: true
     docker_networks: *kea_ha3_network
     networks:
       - name: kea-ha3
         ipv4_address: 172.29.30.13
 provisioner:
-  name: ansible
-  env:
-    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
-    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/../../.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/../../collections:~/.ansible/collections
   inventory:
     host_vars:
       kea1: {kea_dhcp_ha_address: 172.29.30.11}
       kea2: {kea_dhcp_ha_address: 172.29.30.12}
       kea3: {kea_dhcp_ha_address: 172.29.30.13}
-verifier:
-  name: ansible
 scenario:
-  test_sequence:
-    - dependency
-    - destroy
-    - create
-    - converge
-    - idempotence
-    - verify
-    - destroy
+  test_sequence: [dependency, destroy, create, converge, idempotence, verify, destroy]
