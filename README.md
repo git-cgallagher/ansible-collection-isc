@@ -32,6 +32,8 @@ which is retired. See [Migrating](#migrating).
 - Kubernetes mode: the `kubernetes.core` collection plus the `kubernetes`
   Python package on the control node.
 - Alpine hosts: `community.general`, for the `apk` module.
+- Windows domain controllers (`kea_dhcp_msdns`): `ansible.windows` >= 2.6.0 and
+  `microsoft.ad` >= 1.6.0.
 - Stork server: PostgreSQL ≥ 10 with `pgcrypto`, either installed locally by
   the role or an existing server (RDS, CloudNativePG, …).
 - Stork in containers or Kubernetes: Stork images. ISC publishes none; build
@@ -64,6 +66,8 @@ collections:
   - name: git_cgallagher.isc
   - name: community.general   # Alpine hosts
   - name: kubernetes.core     # Kubernetes deployments
+  - name: ansible.windows     # kea_dhcp_msdns on a Windows DC
+  - name: microsoft.ad        # kea_dhcp_msdns on a Windows DC
 ```
 
 ### Kea HA pair with Stork monitoring, on hosts

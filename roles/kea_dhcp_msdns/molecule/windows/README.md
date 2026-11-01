@@ -12,7 +12,7 @@ The VM comes from the `windows_vm` kind of the [`molecule-git-cgallagher`](https
 
 | Step | Asserted |
 |---|---|
-| prepare | The VM is renamed `dc01`, promoted with DNS, and its clock is set from the controller (Kerberos allows 5 minutes of skew). |
+| prepare | The VM is renamed `dc01`, promoted with DNS, and its clock is set from the controller (Kerberos allows 5 minutes of skew). The wait after the reboot also requires the domain zone's replication scope to have left its transient post-promotion `Legacy` state, which `win_dns_zone` can't update. |
 | converge | Both roles apply. |
 | idempotence | A second run changes nothing. In particular, the keytab isn't regenerated, because `ktpass` would bump the key version. |
 | verify, DC | The account's UPN equals Kea's client principal, the SPN and DnsUpdateProxy membership are set, and both zones are `Secure`. |
