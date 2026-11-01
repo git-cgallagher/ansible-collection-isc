@@ -1,0 +1,7 @@
+// {{ ansible_managed }}
+{% for k in bind9_tsig_keys %}
+key "{{ k.name }}" {
+    algorithm {{ k.algorithm | default('hmac-sha256') }};
+    secret "{{ k.secret }}";
+};
+{% endfor %}

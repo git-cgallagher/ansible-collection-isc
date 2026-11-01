@@ -1,0 +1,10 @@
+; Seeded by git_cgallagher.isc.bind9 when the file didn't exist. BIND owns it
+; from here on (dynamic updates, journal); edit it through BIND, not Ansible.
+$TTL {{ bind9__zone.ttl | default(bind9_zone_default_ttl) }}
+@ IN SOA {{ bind9__zone.ns | first }} {{ bind9__zone.soa_email | default('hostmaster.' ~ bind9__zone.name ~ '.') }} 1 3600 600 86400 {{ bind9__zone.ttl | default(bind9_zone_default_ttl) }}
+{% for ns in bind9__zone.ns %}
+@ IN NS {{ ns }}
+{% endfor %}
+{% for rr in bind9__zone.records | default([]) %}
+{{ rr }}
+{% endfor %}

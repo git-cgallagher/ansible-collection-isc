@@ -1,0 +1,15 @@
+---
+# Alpine (bind 9.20). Verified on alpine:3.22. The OpenRC script is in
+# bind-openrc; dig and nsupdate are in bind-tools.
+bind9__os_packages: [bind, bind-tools, bind-openrc]
+bind9__os_service: named
+bind9__os_user: named
+bind9__os_group: named
+bind9__os_conf_file: /etc/bind/named.conf
+bind9__os_conf_dir: /etc/bind
+bind9__os_directory: /var/bind
+bind9__os_zone_dir: /var/bind/dyn
+bind9__os_secondary_dir: /var/bind/sec
+bind9__os_rndc_key: /etc/bind/rndc.key
+bind9__os_keytab: /etc/bind/dns.keytab
+bind9__os_pid_file: /run/named/named.pid

@@ -1,0 +1,46 @@
+---
+- name: Assert a supported OS family
+  ansible.builtin.assert:
+    that: ansible_facts['os_family'] in ['Debian', 'RedHat', 'Alpine']
+    fail_msg: "bind9 supports Debian/Ubuntu, EL/Fedora/Amazon Linux and Alpine, not {{ ansible_facts['os_family'] }}."
+    quiet: true
+
+- name: Assert the listen addresses are set
+  ansible.builtin.assert:
+    that: bind9_listen_on | length > 0
+    fail_msg: "Set bind9_listen_on (e.g. [192.0.2.53], or [any] to listen everywhere). The role never guesses the network."
+    quiet: true
+
+- name: Assert recursion is restricted
+  ansible.builtin.assert:
+    that: not (bind9_recursion | bool) or bind9_allow_recursion | length > 0
+    fail_msg: "bind9_recursion needs bind9_allow_recursion (who may recurse); an open resolver is never the default."
+    quiet: true
+
+- name: Assert zone names are unique
+  ansible.builtin.assert:
+    that: bind9_zones | map(attribute='name') | list | unique | length == bind9_zones | length
+    fail_msg: "bind9_zones lists a zone name twice."
+    quiet: true
+
+- name: Assert each zone has what its type needs
+  ansible.builtin.assert:
+    that:
+      - bind9__zone.type | default('primary') != 'primary' or bind9__zone.ns | default([]) | length > 0
+      - bind9__zone.type | default('primary') != 'secondary' or bind9__zone.primaries | default([]) | length > 0
+      - bind9__zone.type | default('primary') != 'forward' or bind9__zone.forwarders | default([]) | length > 0
+      - not (bind9__zone.update_policy | default([]) | length > 0 and bind9__zone.allow_update | default([]) | length > 0)
+    fail_msg: >-
+      Zone {{ bind9__zone.name }}: a primary zone needs ns, a secondary zone primaries, a forward
+      zone forwarders; update_policy and allow_update can't both be set.
+    quiet: true
+  loop: "{{ bind9_zones }}"
+  loop_control:
+    loop_var: bind9__zone
+    label: "{{ bind9__zone.name }}"
+
+- name: Assert TSIG key names are unique
+  ansible.builtin.assert:
+    that: bind9_tsig_keys | map(attribute='name') | list | unique | length == bind9_tsig_keys | length
+    fail_msg: "bind9_tsig_keys lists a key name twice."
+    quiet: true

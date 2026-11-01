@@ -1,0 +1,87 @@
+{% from '_macros.j2' import aml with context %}
+// {{ ansible_managed }}
+// git_cgallagher.isc.bind9: local changes are overwritten.
+{% if bind9_rndc_enabled | bool %}
+
+include "{{ bind9__os_rndc_key }}";
+controls {
+    inet 127.0.0.1 port {{ bind9_rndc_port }} allow { 127.0.0.1; } keys { "rndc-key"; };
+};
+{% else %}
+
+controls { };
+{% endif %}
+{% if bind9_tsig_keys | length > 0 %}
+
+include "{{ bind9__os_conf_dir }}/tsig-keys.conf";
+{% endif %}
+{% if bind9_statistics_channels | length > 0 %}
+
+statistics-channels {
+{% for c in bind9_statistics_channels %}
+    inet {{ c.address }} port {{ c.port | default(8053) }}{% if c.allow | default([]) | length > 0 %} allow { {{ aml(c.allow) }} }{% endif %};
+{% endfor %}
+};
+{% endif %}
+
+options {
+    directory "{{ bind9__os_directory }}";
+    pid-file "{{ bind9__os_pid_file }}";
+    listen-on port {{ bind9_port }} { {{ aml(bind9_listen_on) }} };
+{% if bind9_listen_on_v6 | length > 0 %}
+    listen-on-v6 port {{ bind9_port }} { {{ aml(bind9_listen_on_v6) }} };
+{% else %}
+    listen-on-v6 { none; };
+{% endif %}
+    allow-query { {{ aml(bind9_allow_query) }} };
+    allow-transfer { {{ aml(bind9_allow_transfer) }} };
+{% if bind9_recursion | bool %}
+    recursion yes;
+    allow-recursion { {{ aml(bind9_allow_recursion) }} };
+{% else %}
+    recursion no;
+{% endif %}
+{% if bind9_forwarders | length > 0 %}
+    forwarders { {{ aml(bind9_forwarders) }} };
+    forward {{ bind9_forward }};
+{% endif %}
+    dnssec-validation {{ bind9_dnssec_validation }};
+{% if bind9_gss_tsig_keytab_src | length > 0 %}
+    tkey-gssapi-keytab "{{ bind9__os_keytab }}";
+{% endif %}
+{% if bind9_options_extra | length > 0 %}
+    {{ bind9_options_extra | trim | indent(4) }}
+{% endif %}
+};
+{% for z in bind9__zones %}
+
+zone "{{ z.name }}" {
+    type {{ z.type }};
+{% if z.type in ['primary', 'secondary'] %}
+    file "{{ z.file }}";
+{% endif %}
+{% if z.type == 'secondary' %}
+    primaries { {{ aml(z.primaries) }} };
+{% endif %}
+{% if z.type == 'forward' %}
+    forwarders { {{ aml(z.forwarders) }} };
+    forward {{ z.forward | default('only') }};
+{% endif %}
+{% if z.update_policy | default([]) | length > 0 %}
+    update-policy {
+{% for rule in z.update_policy %}
+        {{ rule | regex_replace(';\s*$', '') }};
+{% endfor %}
+    };
+{% elif z.allow_update | default([]) | length > 0 %}
+    allow-update { {{ aml(z.allow_update) }} };
+{% endif %}
+{% if z.options | default('') | length > 0 %}
+    {{ z.options | trim | indent(4) }}
+{% endif %}
+};
+{% endfor %}
+{% if bind9_config_extra | length > 0 %}
+
+{{ bind9_config_extra | trim }}
+{% endif %}

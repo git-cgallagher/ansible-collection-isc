@@ -1,0 +1,4 @@
+{# An address-match list body: "a; b; c;" #}
+{% macro aml(items) -%}
+{{ items | map('string') | map('regex_replace', '$', ';') | join(' ') }}
+{%- endmacro %}

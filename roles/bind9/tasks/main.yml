@@ -1,0 +1,18 @@
+---
+# Argument validation (meta/argument_specs.yml) runs automatically before this.
+
+- name: Bootstrap Python on minimal hosts
+  ansible.builtin.include_tasks: bootstrap.yml
+  when: bind9_bootstrap_python | bool
+
+- name: Gather minimal facts when the play skipped them
+  ansible.builtin.setup:
+    gather_subset: [min]
+  when: ansible_facts['os_family'] is not defined
+
+- name: Validate cross-variable constraints
+  ansible.builtin.import_tasks: assert.yml
+
+- name: Deploy from OS packages
+  ansible.builtin.include_tasks: package.yml
+  when: bind9_deployment == 'package'
