@@ -25,6 +25,9 @@ env:
   ANSIBLE_FORCE_COLOR: '1'
   RUNTIME_IMAGE: ghcr.io/git-cgallagher/ansible-runtime:0.2.0-ci@sha256:9f36cb0ddd49251df1eef32142f08176018fe91c10a1c2f2a15dd5442b3bc572
 
+# Every job sets timeout-minutes: GitHub's default is 6 hours, and a stalled
+# install or image pull would hold the runner that long. Each limit is several
+# times the job's slowest green run (2026-11-01).
 jobs:
   # Every merge to main is released (release.yml), so a PR that changes
   # anything shipped in the collection must bump galaxy.yml's version and add
@@ -32,6 +35,7 @@ jobs:
   version-bump:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -63,6 +67,7 @@ jobs:
   sanity:
     name: sanity (${{ matrix.ansible-core-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # devel is an early warning, never a merge gate.
     continue-on-error: ${{ matrix.ansible-core-version == 'devel' }}
     strategy:
@@ -77,6 +82,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -89,6 +95,7 @@ jobs:
     # config with `kea-<daemon> -t` in the ISC 2.6 / 3.0 / 3.2 images.
     name: kea_dhcp render + kea -t
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -98,6 +105,7 @@ jobs:
   molecule-kea:
     name: molecule kea_dhcp (${{ matrix.platform }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -114,6 +122,7 @@ jobs:
     # starts Kea, checks the HA states, then a real failover.
     name: molecule kea_dhcp_ha3
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -125,6 +134,7 @@ jobs:
     # Container mode: AL2023 nodes with systemd + Docker, Kea under units.
     name: molecule kea_dhcp_container
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -137,6 +147,7 @@ jobs:
     # kea_dhcp's container mode on an AL2023 node with its own Docker engine.
     name: molecule stork_container
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -148,6 +159,7 @@ jobs:
     # DDNS end to end: MIT KDC + BIND 9, GSS-TSIG and TSIG updates.
     name: molecule kea_dhcp_dns
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -159,6 +171,7 @@ jobs:
     # AD side on Samba + Kea Kerberos/GSS-TSIG key exchange (ms-dns).
     name: molecule kea_dhcp_msdns
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -169,6 +182,7 @@ jobs:
   molecule-stork:
     name: molecule stork
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -180,6 +194,7 @@ jobs:
     # BIND from distro packages; named in the foreground, TSIG-signed updates land.
     name: molecule bind9 (${{ matrix.platform }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

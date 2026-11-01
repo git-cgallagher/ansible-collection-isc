@@ -125,6 +125,10 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## Conventions
 
+- **Every CI job sets `timeout-minutes`** (2026-11-01): GitHub's default is 6 hours, and a
+  stalled install or image pull would hold the runner that long. 15 minutes for the quick jobs and
+  30 for each `molecule-*` job, several times their slowest green run (7.9 min); `windows-dc`
+  keeps 120 with step limits. A new job needs one too.
 - Role variables are prefixed with the role name (`kea_dhcp_`, `bind9_`,
   `stork_server_`, `stork_agent_`, `stork_repository_`). Internal names:
   `kea_dhcp__*`, `bind9__*` and `_stork_<role>_*`.
