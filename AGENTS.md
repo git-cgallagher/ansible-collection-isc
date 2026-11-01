@@ -49,8 +49,11 @@ export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansibl
 Or install the tools yourself:
 
 ```bash
-# The tools at CI's versions, plus the Molecule driver and its collection (one tag for both):
-pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint molecule \
+# The tools at CI's versions (the image's constraints.txt), plus the Molecule driver and its
+# collection (one tag for both):
+export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
+docker run --rm "$RUNTIME_IMAGE" cat /usr/share/ansible-runtime/constraints.txt > /tmp/constraints.txt
+pip install -c /tmp/constraints.txt ansible-core ansible-lint yamllint molecule \
   "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.1"
 ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.1
 ansible-galaxy collection install -r requirements.yml -p ./collections
@@ -214,9 +217,14 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
   accessible by integration". Galaxy still gets the version, but the GitHub release is lost (1.3.1,
   2026-10-28). Wait for the release run to go green before the next merge.
-- **`.github/ci/requirements.txt` now only constrains `windows-dc.yml`** (and local installs);
-  the image pins everything else. Keep its ansible-core cap and tool pins at the image's versions.
-- **History: every CI `pip install` used `.github/ci/requirements.txt` as constraints** (2026-10-31). It
+- **Every tool version comes from `RUNTIME_IMAGE`** (ansible-runtime's shared dependency model,
+  ansible-runtime#8, 2026-11-01). Jobs in the image use it directly; `windows-dc`, `argument-specs`
+  (all but the ansible-core it varies) and `release.yml` read the image's
+  `/usr/share/ansible-runtime/constraints.txt` (and `collections.yml`) from that line. No file
+  here pins a version: `.github/ci/requirements.txt` and its Dependabot pip entry are gone. A
+  new dependency is pinned in ansible-runtime first (its `consumers` job fails until then).
+- **History: every CI `pip install` used `.github/ci/requirements.txt` as constraints** (2026-10-31,
+  removed 2026-11-01 for the image's pins). It
   caps ansible-core to the sanity matrix's range (`>=2.18,<2.22`) and pins the tools. Before it,
   only the two Stork Molecule jobs carried the cap (inherited from the first Stork commit), so the
   other jobs would have moved to 2.22 the day it shipped. When a new minor ships, raise the cap and

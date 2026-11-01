@@ -41,8 +41,18 @@ jobs:
         with:
           persist-credentials: false
 
+      # Python packages at the versions of the ansible-runtime image ansible-test.yml pins
+      # (its constraints.txt; ansible-runtime's shared dependency model). .cache/ is gitignored.
+      - name: Read the ansible-runtime image's pins
+        timeout-minutes: 10
+        run: |
+          image=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
+          [ -n "$image" ] || { echo "::error::RUNTIME_IMAGE not found in ansible-test.yml"; exit 1; }
+          mkdir -p .cache
+          docker run --rm "$image" cat /usr/share/ansible-runtime/constraints.txt > .cache/constraints.txt
+
       # Ansible, Molecule and the molecule-git-cgallagher driver (versions from
-      # the shared CI constraints file), the git_cgallagher.molecule collection,
+      # the image's constraints above), the git_cgallagher.molecule collection,
       # KVM + QEMU, and the lab directory on the runner's temp disk, exported as
       # MOLECULE_LAB_DIR: the box (~6 GB, plus ~6 GB while unpacking) and the VM
       # disk don't fit on the root filesystem.
@@ -50,7 +60,7 @@ jobs:
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
-          constraints: .github/ci/requirements.txt
+          constraints: .cache/constraints.txt
           kvm: 'true'
           lab-dir: /mnt/kea-lab
 
