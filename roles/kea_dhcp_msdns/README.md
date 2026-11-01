@@ -3,14 +3,14 @@
 Prepares **Active Directory / Microsoft DNS** for ISC Kea's GSS-TSIG dynamic DNS updates. It's the companion to [`kea_dhcp`](../kea_dhcp/README.md) with `kea_dhcp_dns_integration: ms-dns`. Run it against a domain controller. Like every role in this collection, it sets no connection parameters: your inventory decides how Ansible reaches the DC (WinRM, OpenSSH…).
 
 It has two backends:
-- **windows:** the ActiveDirectory and DnsServer PowerShell modules, plus `ktpass`. This is the production target.
+- **windows:** `microsoft.ad.user` for the account, `ansible.windows.win_dns_zone` for the zones, plus `ktpass`. This is the production target.
 - **samba:** `samba-tool` and `ldb-tools` on a Samba AD DC. This is what CI tests.
 
 `kea_dhcp_msdns_backend: auto` picks `windows` for Windows targets and `samba` otherwise.
 
 ## What it does
 
-1. **Service account** (`kea` by default). It's created with a password that never expires; an existing account's password is left alone.
+1. **Service account** (`kea` by default). It's created with a password that never expires; an existing account's password is left alone. On Windows, an existing account is moved into `kea_dhcp_msdns_service_account_ou` when that is set.
 2. **UPN set to Kea's client principal** (`DHCP/kea.<domain>@<REALM>`). AD only issues Kerberos tickets to a UPN, not to an SPN alone. Without this, Kea fails with *bad client credentials*. On Windows `ktpass -mapuser` does the same; on Samba the role sets it with `ldbmodify`.
 3. **SPN** `DHCP/kea.<domain>` on the account.
 4. **DnsUpdateProxy** membership (`kea_dhcp_msdns_dnsupdateproxy`), so Kea can replace records that clients registered themselves.
@@ -24,10 +24,10 @@ Hand the keytab to `kea_dhcp` through `kea_dhcp_dns.keytab_src`.
 
 ## Requirements
 
-- **Windows DC:** the ActiveDirectory and DnsServer PowerShell modules (present on DCs with the DNS role), `ktpass.exe`, and a connection with rights to create users, edit SPNs and group membership, and manage zones. Needs the `ansible.windows` collection (in the collection's `requirements.yml`).
+- **Windows DC:** the DnsServer PowerShell module (present on DCs with the DNS role), `ktpass.exe`, and a connection with rights to create users, edit SPNs and group membership, and manage zones. Needs the `ansible.windows` (>= 2.6.0) and `microsoft.ad` (>= 1.6.0) collections, both in the collection's `requirements.yml`; `microsoft.ad.user` talks LDAP and needs no ActiveDirectory PowerShell module.
 - **Samba AD DC:** root on the DC, `samba-tool`, and `ldb-tools` (installed by the role). `kea_dhcp_msdns_samba_admin_password` is required for the DNS zone calls.
 - **Keytab handling:** `kea_dhcp_msdns_keytab_dest` must be outside any repository. Encrypt the file with `ansible-vault encrypt` if you store it; `kea_dhcp` decrypts it on the way.
-- **Service account password:** it must satisfy the domain's password policy. With the default complexity rules, it also mustn't contain the account name (`kea`). If it does, `New-ADUser` rejects it, and the role reports that error with the password left out.
+- **Service account password:** it must satisfy the domain's password policy. With the default complexity rules, it also mustn't contain the account name (`kea`). If it does, AD rejects it, and `microsoft.ad.user` reports that error with the password left out.
 - **Password exposure:** `samba-tool` and `ktpass` take the password on their command line. Those tasks are `no_log`, but the value is briefly visible in the DC's process list.
 
 ## Example

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.2.0 — 2026-11-01
+
+`kea_dhcp_msdns` Windows backend: the service account and the zones are now
+managed by modules instead of `win_powershell` scripts
+([#21](https://github.com/git-cgallagher/ansible-collection-isc/issues/21)).
+
+- **`microsoft.ad.user`** creates the account, sets its UPN and SPN, and adds
+  it to DnsUpdateProxy, with `update_password: on_create`: the password is only
+  set when the account is created (and by `ktpass` when a keytab is produced),
+  so a run never bumps the key version of a keytab Kea already has. Check mode
+  and diff work; a failure is reported directly (the module keeps the password
+  out of its output), so the `no_log` + `failed_when: false` + assert
+  workaround is gone. One behaviour change: with
+  `kea_dhcp_msdns_service_account_ou` set, an existing account in another OU is
+  moved there (the script only used the OU at creation).
+- **`ansible.windows.win_dns_zone`** creates the forward and reverse zones
+  (primary, domain replication) and converges their dynamic-update setting,
+  with check mode and diff. `kea_dhcp_msdns_dynamic_update` keeps its values
+  (`Secure`, `NonsecureAndSecure`); the role lower-cases them for the module.
+- `ktpass` stays a `win_powershell` task: it only takes the password on its
+  command line. In check mode the script is skipped and reported as a change.
+- `requirements.yml`: `ansible.windows` >= 2.6.0 (`win_dns_zone`), new
+  `microsoft.ad` >= 1.6.0. Both are soft dependencies, only needed on a Windows
+  DC. The Molecule `windows` scenario and the `windows-dc` workflow install them
+  from `requirements.yml`; `git_cgallagher.molecule` already depends on both.
+
 ## 2.1.0 — 2026-11-01
 
 - **New role `bind9`:** ISC BIND 9 as an authoritative server, from the

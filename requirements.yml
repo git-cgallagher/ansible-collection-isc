@@ -4,5 +4,7 @@ collections:
     version: ">=5.0.0"
   - name: community.general    # apk on Alpine
     version: ">=9.0.0"
-  - name: ansible.windows      # kea_dhcp_msdns on Windows domain controllers
-    version: ">=2.0.0"
+  - name: ansible.windows      # kea_dhcp_msdns on Windows domain controllers (win_dns_zone: 2.6.0)
+    version: ">=2.6.0"
+  - name: microsoft.ad         # kea_dhcp_msdns on Windows domain controllers (microsoft.ad.user)
+    version: ">=1.6.0"
