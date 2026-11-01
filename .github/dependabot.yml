@@ -10,15 +10,5 @@ updates:
       actions:
         patterns: ['*']
 
-  # Exact pins for CI's pip tools (.github/ci/requirements.txt, used as a
-  # constraints file). ansible-core is ignored: its <2.22 cap moves by hand,
-  # together with the sanity matrix (see the comment in that file).
-  - package-ecosystem: pip
-    directory: /.github/ci
-    schedule:
-      interval: monthly
-    ignore:
-      - dependency-name: ansible-core
-    groups:
-      ci-tools:
-        patterns: ['*']
+  # No pip ecosystem: every CI tool version comes from the ansible-runtime image
+  # (RUNTIME_IMAGE in ansible-test.yml), whose Renovate bumps them.
