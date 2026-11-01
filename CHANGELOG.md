@@ -13,7 +13,7 @@ No role behaviour changes.
     and keytab path are single inventory variables shared by both roles.
   - [`examples/stork_server/package`](examples/stork_server/package/): the
     Stork server from ISC's packages with a local PostgreSQL, the required
-    admin password, and the TLS, metrics and OIDC knobs shown commented out.
+    admin password, plus the TLS, metrics and extra `STORK_*` settings.
 - `examples/README.md` lists every example and the order to run them in (the
   server before any agents, which read their token from its API).
 

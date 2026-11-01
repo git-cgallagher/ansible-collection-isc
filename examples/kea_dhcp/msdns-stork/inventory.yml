@@ -29,7 +29,7 @@ all:
         # Windows DC (PSRP over WinRM; pip install pypsrp on the controller).
         ansible_connection: psrp
         ansible_port: 5986
-        ansible_user: CORP\\ansible
+        ansible_user: CORP\ansible
         ansible_password: "{{ vault_dc_password }}"
         ansible_psrp_cert_validation: validate   # ignore only in a lab
         kea_dhcp_msdns_domain: "{{ ad_domain }}"
