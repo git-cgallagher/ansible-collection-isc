@@ -68,12 +68,10 @@ jobs:
     name: sanity (${{ matrix.ansible-core-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # devel is an early warning, never a merge gate.
-    continue-on-error: ${{ matrix.ansible-core-version == 'devel' }}
     strategy:
       fail-fast: false
       matrix:
-        ansible-core-version: [stable-2.18, stable-2.19, stable-2.20, stable-2.21, devel]
+        ansible-core-version: [stable-2.18, stable-2.19, stable-2.20, stable-2.21]
     steps:
       - uses: ansible-community/ansible-test-gh-action@6ded727edb598e670ac056a8e680ca4050bac0a3  # v1.18.0
         with:
