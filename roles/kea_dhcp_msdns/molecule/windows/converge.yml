@@ -6,6 +6,7 @@
     kea_dhcp_msdns_domain: "{{ lab_domain }}"
     kea_dhcp_msdns_service_account_password: "{{ lab_kea_password }}"
     kea_dhcp_msdns_reverse_zones: ["{{ lab_reverse_zone }}"]
+    kea_dhcp_msdns_service_account_ou: "{{ lab_account_ou }}"
     kea_dhcp_msdns_keytab_dest: "{{ lab_keytab }}"
   tasks:
     - name: Apply kea_dhcp_msdns from this checkout

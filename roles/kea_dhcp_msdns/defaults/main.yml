@@ -36,6 +36,10 @@ kea_dhcp_msdns_forward_zones: ["{{ kea_dhcp_msdns_domain }}"]
 kea_dhcp_msdns_reverse_zones: []
 # Windows only: Secure (recommended) or NonsecureAndSecure.
 kea_dhcp_msdns_dynamic_update: Secure
+# Windows only: AD replication scope of the zones, Domain, Forest or Legacy.
+# Applied to existing zones too: a zone in another scope is converted, a
+# file-backed (non AD-integrated) zone fails.
+kea_dhcp_msdns_zone_replication: Domain
 
 # Keytab: produced on the DC, fetched to this CONTROLLER path (mode 0600),
 # then deleted from the DC. Keep it out of any repository; encrypt it with

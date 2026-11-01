@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.1 — 2026-11-01
+
+`kea_dhcp_msdns` Windows backend, fixes from the review of 2.2.0:
+
+- **Fix: an existing service account outside the OU was not found.** The
+  `microsoft.ad.user` task had no `identity`, so the module only looked at
+  `CN=<account>` under `kea_dhcp_msdns_service_account_ou` (or Users). On a
+  domain where the account already existed elsewhere it would have tried to
+  create a second one and failed. It now finds the account by sAMAccountName
+  and moves it into the OU when one is set, which is what 2.2.0's notes
+  claimed. The Molecule `windows` scenario pre-creates the account in Users and
+  checks that converge moves it.
+- **New `kea_dhcp_msdns_zone_replication`** (`Domain`, `Forest` or `Legacy`;
+  default `Domain`, which 2.2.0 hard-coded). `win_dns_zone` applies the scope to
+  existing zones on every run, so a pre-existing zone in another scope is
+  converted and a file-backed zone fails. The 2.1 script never touched an
+  existing zone's scope. Set the variable to the scope your zones use.
+- `.claude/worktrees/` is gitignored.
+
 ## 2.2.0 — 2026-11-01
 
 `kea_dhcp_msdns` Windows backend: the service account and the zones are now

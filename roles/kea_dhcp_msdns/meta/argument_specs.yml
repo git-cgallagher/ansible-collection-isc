@@ -54,6 +54,13 @@ argument_specs:
         choices:
           - Secure
           - NonsecureAndSecure
+      kea_dhcp_msdns_zone_replication:
+        type: str
+        description: 'Windows: AD replication scope of the zones; existing zones are converted to it.'
+        choices:
+          - Domain
+          - Forest
+          - Legacy
       kea_dhcp_msdns_keytab_dest:
         type: str
         description: Controller path the keytab is fetched to (mode 0600). Keep it out of repositories. Required.

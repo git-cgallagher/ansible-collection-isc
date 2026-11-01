@@ -53,6 +53,8 @@ provisioner:
         # reverse zone kea_dhcp_msdns creates for them.
         lab_subnet: 10.60.0.0/24
         lab_reverse_zone: 0.60.10.in-addr.arpa
+        # prepare creates the kea account in Users; converge must move it here.
+        lab_account_ou: OU=Services,DC=kealab,DC=test
         lab_keytab: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/kea.keytab"
 scenario:
   test_sequence: [dependency, destroy, syntax, create, prepare, converge, idempotence, verify, destroy]
