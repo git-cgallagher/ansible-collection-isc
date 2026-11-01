@@ -39,8 +39,8 @@ docs/                    stork-research, stork-kubernetes, testing, kea_dhcp-cha
 ```bash
 # The tools at CI's versions, plus the Molecule driver and its collection (one tag for both):
 pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint molecule \
-  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.0"
-ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.0
+  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.1"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.1
 ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0

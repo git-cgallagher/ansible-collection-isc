@@ -46,7 +46,7 @@ jobs:
       # KVM + QEMU, and the lab directory on the runner's temp disk, exported as
       # MOLECULE_LAB_DIR: the box (~6 GB, plus ~6 GB while unpacking) and the VM
       # disk don't fit on the root filesystem.
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           collection: git_cgallagher.isc
           requirements: requirements.yml
@@ -64,7 +64,7 @@ jobs:
       - name: Capture the VM screen
         if: failure()
         timeout-minutes: 2
-        uses: git-cgallagher/ansible-collection-molecule/.github/actions/vm-screendump@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+        uses: git-cgallagher/ansible-collection-molecule/.github/actions/vm-screendump@0a21eb793e3e5b50fe25c06fcbf76a7d202c634f  # v0.2.1
         with:
           lab-dir: ${{ env.MOLECULE_LAB_DIR }}
           platforms: dc01
