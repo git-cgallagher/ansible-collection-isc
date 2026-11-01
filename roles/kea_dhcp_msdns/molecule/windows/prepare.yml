@@ -19,7 +19,13 @@
         ad_forest_features: [AD-Domain-Services, DNS, RSAT-AD-PowerShell, RSAT-DNS-Server]
         ad_forest_install_dns: true
         ad_forest_ready_modules: [ActiveDirectory, DnsServer]
-        ad_forest_ready_test: "$null = Get-DnsServerZone -Name '{{ lab_domain }}' -ErrorAction Stop"
+        # The domain zone reads ReplicationScope 'Legacy' for a minute or two
+        # after promotion. Until it settles to 'Domain', Set-DnsServerPrimaryZone
+        # -ReplicationScope (which win_dns_zone calls on an existing zone) fails
+        # with "Failed to reset the directory partition for zone".
+        ad_forest_ready_test: >-
+          $zone = Get-DnsServerZone -Name '{{ lab_domain }}' -ErrorAction Stop;
+          if ($zone.ReplicationScope -eq 'Legacy') { throw 'the zone is still Legacy' }
         # Kerberos tolerates 5 minutes of skew; Kea's container uses the runner's clock.
         ad_forest_sync_clock: true
 

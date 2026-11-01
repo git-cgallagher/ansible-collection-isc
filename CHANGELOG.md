@@ -25,6 +25,9 @@ managed by modules instead of `win_powershell` scripts
   `microsoft.ad` >= 1.6.0. Both are soft dependencies, only needed on a Windows
   DC. The Molecule `windows` scenario and the `windows-dc` workflow install them
   from `requirements.yml`; `git_cgallagher.molecule` already depends on both.
+- The Molecule `windows` scenario waits, after the DC's promotion reboot, for
+  the domain zone's replication scope to leave its transient `Legacy` state:
+  `win_dns_zone` can't update a zone in that state.
 
 ## 2.1.0 — 2026-11-01
 

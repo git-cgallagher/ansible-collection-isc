@@ -27,6 +27,7 @@ Hand the keytab to `kea_dhcp` through `kea_dhcp_dns.keytab_src`.
 - **Windows DC:** the DnsServer PowerShell module (present on DCs with the DNS role), `ktpass.exe`, and a connection with rights to create users, edit SPNs and group membership, and manage zones. Needs the `ansible.windows` (>= 2.6.0) and `microsoft.ad` (>= 1.6.0) collections, both in the collection's `requirements.yml`; `microsoft.ad.user` talks LDAP and needs no ActiveDirectory PowerShell module.
 - **Samba AD DC:** root on the DC, `samba-tool`, and `ldb-tools` (installed by the role). `kea_dhcp_msdns_samba_admin_password` is required for the DNS zone calls.
 - **Keytab handling:** `kea_dhcp_msdns_keytab_dest` must be outside any repository. Encrypt the file with `ansible-vault encrypt` if you store it; `kea_dhcp` decrypts it on the way.
+- **A settled DC:** for a minute or two after a DC's promotion, its domain zone reports the replication scope `Legacy`, and the zone task fails with *Failed to reset the directory partition*. Run the role once the scope reads `Domain` (`Get-DnsServerZone`).
 - **Service account password:** it must satisfy the domain's password policy. With the default complexity rules, it also mustn't contain the account name (`kea`). If it does, AD rejects it, and `microsoft.ad.user` reports that error with the password left out.
 - **Password exposure:** `samba-tool` and `ktpass` take the password on their command line. Those tasks are `no_log`, but the value is briefly visible in the DC's process list.
 
