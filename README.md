@@ -135,7 +135,8 @@ collections:
         kea_dhcp_k8s_extra_volumes: "{{ stork_agent_k8s_volumes }}"
 ```
 
-More inventories are in [`examples/kea_dhcp/`](examples/kea_dhcp/). The
+Ready-to-adapt playbook and inventory pairs are in [`examples/`](examples/),
+including Kea with Microsoft DNS plus Stork agents, and the Stork server. The
 Stork sidecar wiring, including how its mounts must mirror Kea's, is in
 [docs/stork-kubernetes.md](docs/stork-kubernetes.md).
 

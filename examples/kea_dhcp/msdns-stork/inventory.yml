@@ -1,0 +1,89 @@
+---
+# Kea 3.0 on two Amazon Linux 2023 VMs (minimal works; the play installs
+# Python first), updating Microsoft DNS on an Active Directory domain
+# controller with GSS-TSIG, and a Stork agent next to each Kea.
+#
+# Secrets come from Ansible Vault (ansible-vault create group_vars/all/vault.yml):
+#   vault_dc_password        - the AD admin that runs play 1 on the DC
+#   vault_kea_ad_password    - the "kea" AD service account (new or existing)
+#   vault_kea_api_password   - Kea's API client "stork", read by the agent
+#   vault_stork_admin_password - Stork's admin login (set by examples/stork_server/package)
+all:
+  vars:
+    # Shared by the DC play and the Kea play so the two roles can't drift.
+    ad_domain: corp.example.com
+    ad_reverse_zones: [2.0.192.in-addr.arpa]
+    # The keytab kea_dhcp_msdns fetches to the controller, and kea_dhcp copies
+    # to each Kea host. Keep it OUTSIDE any repository; it's a credential.
+    # Encrypt it with `ansible-vault encrypt` if you store it; kea_dhcp
+    # decrypts it on the way.
+    kea_keytab: "{{ lookup('ansible.builtin.env', 'HOME') }}/.secrets/kea-corp.keytab"
+  children:
+    dc:
+      hosts:
+        # The inventory name is the DC's real short host name: it's the
+        # DNS service principal (DNS/dc1.corp.example.com@CORP.EXAMPLE.COM).
+        dc1: {ansible_host: 192.0.2.10}
+      vars:
+        # The roles set no connection parameters; this is one way to reach a
+        # Windows DC (PSRP over WinRM; pip install pypsrp on the controller).
+        ansible_connection: psrp
+        ansible_port: 5986
+        ansible_user: CORP\ansible
+        ansible_password: "{{ vault_dc_password }}"
+        ansible_psrp_cert_validation: validate   # ignore only in a lab
+        kea_dhcp_msdns_domain: "{{ ad_domain }}"
+        kea_dhcp_msdns_reverse_zones: "{{ ad_reverse_zones }}"
+        # Must satisfy the domain's password policy; with the default
+        # complexity rules it also mustn't contain the account name ("kea").
+        kea_dhcp_msdns_service_account_password: "{{ vault_kea_ad_password }}"
+        kea_dhcp_msdns_keytab_dest: "{{ kea_keytab }}"
+        # A keytab is only produced when kea_keytab doesn't exist yet. Set
+        # kea_dhcp_msdns_keytab_rotate: true to make a new one; on Windows
+        # that bumps the key version and invalidates every deployed copy.
+    kea:
+      hosts:
+        kea1: {ansible_host: 192.0.2.11}
+        kea2: {ansible_host: 192.0.2.12}
+      vars:
+        # ms-dns needs Kea 3.0+ from ISC's packages (the GSS-TSIG hook).
+        kea_dhcp_version_series: "3.0"
+        # AL2023's NIC name on EC2 Nitro; check `ip -br link` on your VMs.
+        kea_dhcp_interfaces: [ens5]
+        kea_dhcp_dns_integration: ms-dns
+        kea_dhcp_dns:
+          domain: "{{ ad_domain }}"
+          # name = each DC's real short host name (the DNS service principal).
+          servers:
+            - {name: dc1, ip: 192.0.2.10}
+          reverse_zones: "{{ ad_reverse_zones }}"
+          keytab_src: "{{ kea_keytab }}"
+          install_krb5_tools: true   # kinit/klist on the Kea host, for troubleshooting
+        # HA pair: peers reach each other on ansible_host:8001 (dedicated
+        # listener); open TCP 8001 between the two VMs.
+        kea_dhcp_ha_enabled: true
+        kea_dhcp_ha_mode: hot-standby
+        kea_dhcp_ha_peers:
+          - {name: kea1, role: primary}
+          - {name: kea2, role: standby, auto-failover: true}
+        # The Stork agent talks to Kea's HTTP API and reads its credentials
+        # from Kea's config, preferring a client whose name starts with "stork".
+        kea_dhcp_api_http_enabled: true
+        kea_dhcp_api_auth_clients:
+          - {user: stork, password: "{{ vault_kea_api_password }}"}
+        kea_dhcp_dhcp4_settings:
+          valid-lifetime: 7200
+          option-data:
+            # Windows clients need the DC for DNS; Kea owns their A records
+            # (the ms-dns preset sets ddns-override-client-update).
+            - {name: domain-name-servers, data: "192.0.2.10"}
+          subnet4:
+            - id: 1
+              subnet: 192.0.2.0/24
+              pools: [{pool: 192.0.2.100 - 192.0.2.200}]
+              option-data: [{name: routers, data: 192.0.2.1}]
+        # Stork agent (play 3). The server URL is where the AGENTS reach the
+        # server; the token is read from its API from the control node.
+        stork_agent_version: "2.6.0"
+        stork_agent_server_url: http://stork.corp.example.com:8080
+        stork_agent_api_password: "{{ vault_stork_admin_password }}"

@@ -59,6 +59,8 @@ Hand the keytab to `kea_dhcp` through `kea_dhcp_dns.keytab_src`.
           keytab_src: "{{ playbook_dir }}/../secrets/kea.keytab"
 ```
 
+A complete inventory, with the DC's PSRP connection and a Stork agent next to each Kea, is in [`examples/kea_dhcp/msdns-stork`](../../examples/kea_dhcp/msdns-stork/).
+
 All variables are in [`meta/argument_specs.yml`](meta/argument_specs.yml), and [`defaults/main.yml`](defaults/main.yml) has comments.
 
 ## Testing

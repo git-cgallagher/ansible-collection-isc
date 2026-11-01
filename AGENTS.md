@@ -20,7 +20,7 @@ roles/kea_dhcp/          Kea DHCP (packages or Kubernetes); its README is the us
 roles/bind9/             BIND 9 authoritative server from distro packages (Kea's DDNS target)
 roles/stork_*            Stork server, agent, package repository
 docker/                  Stork image Dockerfiles (ISC publishes none)
-examples/kea_dhcp/       ready-to-adapt Kea inventories
+examples/                ready-to-adapt playbook + inventory pairs (kea_dhcp/, stork_server/); examples/README.md lists them
 roles/kea_dhcp/molecule/default/    Kea package installs on 7 platforms (no init: configs validated, services not started)
 roles/kea_dhcp/molecule/ha3/        Kea 3-node HA (primary + standby + backup): starts Kea, checks states + failover
 roles/kea_dhcp/molecule/container/  Kea container mode: systemd + Docker in the node, Kea 3.0 and 2.6 + ctrl-agent
