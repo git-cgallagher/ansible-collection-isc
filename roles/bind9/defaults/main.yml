@@ -1,0 +1,91 @@
+---
+# bind9 — ISC BIND 9 as an authoritative server, from the distro's packages.
+# Its main job in this collection is to be the target of Kea's dynamic DNS
+# updates (TSIG or GSS-TSIG), but any zones work. Every value below can be
+# overridden; there are no default addresses or zones, the role asserts instead.
+
+# Only package mode exists today; the variable leaves room for container and
+# Kubernetes modes.
+bind9_deployment: package
+
+# Install python3 with raw first (minimal images).
+bind9_bootstrap_python: false
+
+bind9_package_state: present
+# Added to the OS's package list (vars/os/<family>.yml).
+bind9_packages_extra: []
+
+bind9_manage_service: true
+bind9_service_enabled: true
+bind9_service_state: started
+
+# Check named.conf with named-checkconf and seeded zone files with
+# named-checkzone before they're installed, and every zone with
+# `named-checkconf -z` before BIND is reloaded.
+bind9_validate_config: true
+
+# Addresses BIND listens on, e.g. [192.0.2.53] or [any]. Required.
+bind9_listen_on: []
+# IPv6 addresses; empty renders `listen-on-v6 { none; }`.
+bind9_listen_on_v6: []
+bind9_port: 53
+
+# Address-match lists, rendered as written (addresses, prefixes, ACL names,
+# `key <name>`, any, none).
+bind9_allow_query: [any]
+bind9_allow_transfer: [none]
+
+# Recursion is off: this is an authoritative server. Turning it on needs
+# bind9_allow_recursion (an open resolver is never the default).
+bind9_recursion: false
+bind9_allow_recursion: []
+bind9_forwarders: []
+# first or only (used when bind9_forwarders is set).
+bind9_forward: only
+# auto, yes or no.
+bind9_dnssec_validation: auto
+
+# TSIG keys, written to <config dir>/tsig-keys.conf (mode 0640). Each item:
+#   name:      key name, referenced from update policies ("grant kea-key ...")
+#   secret:    base64 secret, e.g. from `tsig-keygen -a hmac-sha256 <name>`. Vault it.
+#   algorithm: default hmac-sha256
+bind9_tsig_keys: []
+
+# GSS-TSIG (Kerberos): a controller path to the DNS service keytab
+# (DNS/<server fqdn>@<REALM>). It's copied to the OS's keytab path and set as
+# tkey-gssapi-keytab. Vault-encrypted files are decrypted on the way.
+bind9_gss_tsig_keytab_src: ""
+
+# Zones. Each item:
+#   name:          zone name (required)
+#   type:          primary (default), secondary or forward
+#   file:          zone file; default <zone dir>/<name>.db (primary) or
+#                  <secondary dir>/<name>.db (secondary)
+#   update_policy: list of update-policy rules, as written, e.g.
+#                  "grant kea-key zonesub ANY"
+#   allow_update:  address-match list (instead of update_policy)
+#   primaries:     secondary zones: primary addresses
+#   forwarders:    forward zones: addresses
+#   forward:       forward zones: first or only (default only)
+#   options:       extra zone statements, as written
+#   # primary zones only: the role writes the zone file when it doesn't
+#   # exist yet, then leaves it alone (dynamic updates own it from then on)
+#   ns:            NS names (required; the first one goes in the SOA)
+#   soa_email:     SOA RNAME, default hostmaster.<name>.
+#   ttl:           default bind9_zone_default_ttl
+#   records:       initial resource records, as written ("ns1 IN A 192.0.2.53")
+bind9_zones: []
+bind9_zone_default_ttl: 300
+
+# rndc: a key is generated (rndc-confgen -a) at the OS's default path when
+# missing, and named listens for rndc on 127.0.0.1.
+bind9_rndc_enabled: true
+bind9_rndc_port: 953
+
+# Statistics channels (HTTP; Stork's agent reads them). Each item:
+#   address: e.g. 127.0.0.1;  port: default 8053;  allow: address-match list
+bind9_statistics_channels: []
+
+# Appended inside options { } and to the end of named.conf, as written.
+bind9_options_extra: ""
+bind9_config_extra: ""

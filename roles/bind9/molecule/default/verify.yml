@@ -1,0 +1,96 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Load the role's OS variables
+      ansible.builtin.include_vars: "{{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') }}/vars/os/{{ ansible_facts['os_family'] }}.yml"
+
+    - name: Check the config and every zone
+      ansible.builtin.command:
+        argv: [named-checkconf, -z, "{{ bind9__os_conf_file }}"]
+      changed_when: false
+
+    - name: Check the service is installed for the init system
+      ansible.builtin.stat:
+        path: "{{ '/etc/init.d/named' if ansible_facts['os_family'] == 'Alpine' else '/usr/lib/systemd/system/named.service' }}"
+      register: bind9_unit
+      failed_when: not bind9_unit.stat.exists
+
+    # No init in these containers. A daemon started by a plain command dies with
+    # its docker exec session, so run it in the foreground under async.
+    - name: Start named (foreground, detached by async)
+      ansible.builtin.command:
+        argv: [named, -g, -u, "{{ bind9__os_user }}", -c, "{{ bind9__os_conf_file }}"]
+      async: 3600
+      poll: 0
+      changed_when: true
+
+    - name: Wait for the seeded zone to answer
+      ansible.builtin.command:
+        cmd: dig +short @127.0.0.1 ns1.example.test A
+      register: bind9_ns1
+      until: bind9_ns1.stdout == '127.0.0.1'
+      retries: 30
+      delay: 2
+      changed_when: false
+
+    - name: Query the static zone
+      ansible.builtin.command:
+        cmd: dig +short @127.0.0.1 www.static.test A
+      register: bind9_www
+      failed_when: bind9_www.stdout != '192.0.2.80'
+      changed_when: false
+
+    - name: Send a TSIG-signed update
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          nsupdate -k {{ bind9__os_conf_dir }}/tsig-keys.conf <<'UPD'
+          server 127.0.0.1
+          zone example.test
+          update add host1.example.test. 300 IN A 192.0.2.10
+          send
+          zone 2.0.192.in-addr.arpa
+          update add 10.2.0.192.in-addr.arpa. 300 IN PTR host1.example.test.
+          send
+          UPD
+      changed_when: true
+
+    - name: Check the update landed
+      ansible.builtin.command:
+        cmd: "dig +short @127.0.0.1 {{ item.q }}"
+      register: bind9_updated
+      failed_when: bind9_updated.stdout != item.want
+      changed_when: false
+      loop:
+        - { q: host1.example.test A, want: 192.0.2.10 }
+        - { q: -x 192.0.2.10, want: host1.example.test. }
+
+    - name: Send an unsigned update (must be refused)
+      ansible.builtin.shell:
+        cmd: |
+          nsupdate <<'UPD'
+          server 127.0.0.1
+          zone example.test
+          update add rogue.example.test. 300 IN A 192.0.2.66
+          send
+          UPD
+      register: bind9_unsigned
+      failed_when: bind9_unsigned.rc == 0 or 'REFUSED' not in bind9_unsigned.stdout + bind9_unsigned.stderr
+      changed_when: false
+
+    - name: Check rndc talks to named
+      ansible.builtin.command:
+        cmd: rndc status
+      register: bind9_rndc
+      failed_when: "'server is up and running' not in bind9_rndc.stdout"
+      changed_when: false
+
+    - name: Check the statistics channel answers
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8053/
+
+    - name: Show the BIND version
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ bind9_rndc.stdout_lines | select('match', '^version') | first }}"

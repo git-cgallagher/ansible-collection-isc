@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.0 — 2026-11-01
+
+- **New role `bind9`:** ISC BIND 9 as an authoritative server, from the
+  distro's packages (Debian/Ubuntu, EL/Fedora/Amazon Linux 2023, Alpine). It
+  writes `named.conf`, TSIG keys, the GSS-TSIG keytab, update policies and
+  primary, secondary or forward zones. Primary zone files are seeded once and
+  then left to dynamic updates. Every config is checked with `named-checkconf`
+  / `named-checkzone` before it's installed. It has no default listen
+  addresses or zones (it asserts), and recursion is off unless
+  `bind9_allow_recursion` is set. Optional rndc key and statistics channels.
+- New Molecule scenario `roles/bind9/molecule/default` (AL2023, Rocky 9,
+  Debian 12, Ubuntu 24.04, Alpine 3.22: BIND 9.16, 9.18, 9.20): zones answer,
+  a TSIG-signed update lands, an unsigned one is refused, rndc and the
+  statistics channel respond. CI job `molecule bind9 (<platform>)`.
+
 ## 2.0.1 — 2026-10-31
 
 No role behaviour changes.

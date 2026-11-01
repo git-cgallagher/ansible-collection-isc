@@ -1,8 +1,8 @@
 # AGENTS.md — ansible-collection-isc
 
 Ansible collection **`git_cgallagher.isc`** (MIT) for ISC network services. It
-holds the Kea role `kea_dhcp` and the Stork roles `stork_server`, `stork_agent`
-and `stork_repository`. Public repo `git-cgallagher/ansible-collection-isc`,
+holds the Kea roles `kea_dhcp` and `kea_dhcp_msdns`, the BIND role `bind9`, and
+the Stork roles `stork_server`, `stork_agent` and `stork_repository`. Public repo `git-cgallagher/ansible-collection-isc`,
 published to Galaxy as `git_cgallagher.isc`.
 
 It **replaces** the standalone role `git-cgallagher.kea_dhcp` (repo
@@ -17,6 +17,7 @@ your work in a separate `git worktree` instead.
 
 ```
 roles/kea_dhcp/          Kea DHCP (packages or Kubernetes); its README is the user guide
+roles/bind9/             BIND 9 authoritative server from distro packages (Kea's DDNS target)
 roles/stork_*            Stork server, agent, package repository
 docker/                  Stork image Dockerfiles (ISC publishes none)
 examples/kea_dhcp/       ready-to-adapt Kea inventories
@@ -26,6 +27,7 @@ roles/kea_dhcp/molecule/container/  Kea container mode: systemd + Docker in the 
 roles/kea_dhcp/molecule/dns/        Kea DDNS end to end: MIT KDC + BIND 9, bind9-gss-tsig and rfc2136
 roles/kea_dhcp_msdns/molecule/default/  kea_dhcp_msdns on Samba AD + Kea ms-dns: kinit and GSS-TSIG key exchange
 roles/kea_dhcp_msdns/molecule/windows/  real Windows Server 2022 DC + Microsoft DNS (KVM; manual windows-dc workflow)
+roles/bind9/molecule/default/           BIND on 5 distros (9.16/9.18/9.20): named started in verify, TSIG update lands, unsigned refused
 roles/stork_server/molecule/default/    Stork server + agents next to Kea 3.0 (no auth) and 3.2 (basic auth)
 roles/stork_agent/molecule/container/   Stork on AL2023: server from packages, agent in a container next to containerised Kea
 tests/kea_dhcp/          render 8 Kea deployment shapes + `kea -t` in ISC 2.6/3.0/3.2 images
@@ -51,6 +53,7 @@ tests/argument_specs/run.sh         # every role: spec matches defaults, ansible
 (cd roles/kea_dhcp && molecule test -s container)  # container mode (native-arch nodes; dockerd crashes under QEMU)
 (cd roles/kea_dhcp_msdns && molecule test -s default)  # AD side (Samba) + Kea Kerberos/TKEY
 (cd roles/kea_dhcp_msdns && molecule test -s windows)  # real Windows DC + Microsoft DNS (Linux+KVM only; CI: manual windows-dc workflow)
+(cd roles/bind9 && molecule test -s default)       # per platform in CI: --platform-name <name>
 (cd roles/stork_server && molecule test -s default)
 (cd roles/stork_agent && molecule test -s container)
 ```
@@ -110,9 +113,12 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 
 ## Conventions
 
-- Role variables are prefixed with the role name (`kea_dhcp_`, `stork_server_`,
-  `stork_agent_`, `stork_repository_`). Internal names: `kea_dhcp__*` and
-  `_stork_<role>_*`.
+- Role variables are prefixed with the role name (`kea_dhcp_`, `bind9_`,
+  `stork_server_`, `stork_agent_`, `stork_repository_`). Internal names:
+  `kea_dhcp__*`, `bind9__*` and `_stork_<role>_*`.
+- New roles name their deployment mode `<role>_deployment` (as `kea_dhcp` and
+  `bind9` do), not `<role>_deploy_mode` (the Stork roles' older name, kept for
+  compatibility).
 - Roles reference each other by FQCN (`git_cgallagher.isc.<role>`).
 - Booleans are read with `| bool`.
 - READMEs follow Ansible conventions:
@@ -234,6 +240,22 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   (`overriding namespace name via metadata`). It must be exactly `git-cgallagher`; `cgallagher`
   and `git_cgallagher` fail with "legacy namespace … does not exist". Lint accepts the hyphen.
 
+### bind9
+
+- The distros put BIND in different places, and AppArmor (Debian/Ubuntu) or SELinux (EL) only lets
+  `named` write in some of them. Zones that take updates live in `/var/lib/bind`,
+  `/var/named/dynamic` or `/var/bind/dyn` (`vars/os/<family>.yml`, each path checked in a container,
+  2026-11-01). Containers have no AppArmor or SELinux, so Molecule can't catch a dynamic zone placed
+  elsewhere; on a real host its journal writes would be denied.
+- The role writes primary zone files only when missing (`force: false`): once BIND has journalled
+  dynamic updates, rewriting the file would lose them or clash with the journal.
+- EL's `named.service` sets `KRB5_KTNAME=/etc/named.keytab`, so the role uses that path for the
+  GSS-TSIG keytab there.
+- Alpine's init script is in `bind-openrc`, not `bind`; it reads `/etc/bind/named.conf` and the
+  pid file from the config.
+- Docker Desktop on the dev Mac quit while five amd64 containers were installing BIND in parallel
+  under emulation (2026-11-01; the cause isn't confirmed). Run local Molecule platforms one at a time.
+
 ### Stork roles
 
 - **RPM PostgreSQL: allow `::1` as well as `127.0.0.1`.** The server's Go
@@ -316,5 +338,10 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
   to build them.
 - `kea-admin` schema management is untested against a live MySQL/PostgreSQL.
 - Molecule cannot start services (no init in containers): `kea_dhcp_ha3` starts kea-dhcp4 directly, but starting Kea through systemd/OpenRC is still untested in CI.
-- Possible additions: BIND 9 (Stork already monitors it); reuse
-  `stork_repository` for Kea's Cloudsmith repos.
+- `bind9`: replace the hand-written BIND setup in `roles/kea_dhcp/molecule/dns/prepare.yml` with the
+  role, so its GSS-TSIG keytab path is tested end to end (today only TSIG updates are).
+- `bind9`: Stork monitoring. Check how the Stork agent finds BIND (process, rndc key, statistics
+  channel) before adding anything for it.
+- `bind9`: not yet supported: DNSSEC signing, catalog zones, views, ISC's own packages, container and
+  Kubernetes modes. Starting `named` through systemd/OpenRC is untested in CI (as for Kea).
+- Possible addition: reuse `stork_repository` for Kea's Cloudsmith repos.

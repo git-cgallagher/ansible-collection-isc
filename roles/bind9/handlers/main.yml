@@ -1,0 +1,10 @@
+---
+# A reload re-reads named.conf, keys and the keytab (rndc reload; named.service's
+# ExecReload). Dynamic zones aren't reloaded from their seeded files.
+- name: Reload BIND
+  ansible.builtin.service:
+    name: "{{ bind9__os_service }}"
+    state: reloaded
+  when:
+    - bind9_manage_service | bool
+    - bind9_service_state != 'stopped'

@@ -1,0 +1,15 @@
+---
+# Debian and Ubuntu (bind9 9.18). Verified on debian:12 and ubuntu:24.04.
+# AppArmor lets named write only under /var/lib/bind and /var/cache/bind.
+bind9__os_packages: [bind9, bind9-utils, bind9-dnsutils]
+bind9__os_service: named
+bind9__os_user: bind
+bind9__os_group: bind
+bind9__os_conf_file: /etc/bind/named.conf
+bind9__os_conf_dir: /etc/bind
+bind9__os_directory: /var/cache/bind
+bind9__os_zone_dir: /var/lib/bind
+bind9__os_secondary_dir: /var/cache/bind
+bind9__os_rndc_key: /etc/bind/rndc.key
+bind9__os_keytab: /etc/bind/dns.keytab
+bind9__os_pid_file: /run/named/named.pid

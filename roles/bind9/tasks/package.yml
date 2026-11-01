@@ -1,0 +1,111 @@
+---
+- name: Load OS variables
+  ansible.builtin.include_vars: "os/{{ ansible_facts['os_family'] }}.yml"
+
+- name: Resolve zone defaults (type, file)
+  ansible.builtin.set_fact:
+    bind9__zones: >-
+      {%- set bind9__ns = namespace(zones=[]) -%}
+      {%- for z in bind9_zones -%}
+      {%-   set t = z.type | default('primary') -%}
+      {%-   set d = bind9__os_zone_dir if t == 'primary' else bind9__os_secondary_dir -%}
+      {%-   set bind9__ns.zones = bind9__ns.zones + [z | combine({'type': t, 'file': z.file | default(d ~ '/' ~ z.name ~ '.db')})] -%}
+      {%- endfor -%}
+      {{ bind9__ns.zones }}
+
+- name: Install BIND
+  ansible.builtin.package:
+    name: "{{ bind9__os_packages + bind9_packages_extra }}"
+    state: "{{ bind9_package_state }}"
+    update_cache: "{{ omit if ansible_facts['os_family'] == 'RedHat' else true }}"
+
+- name: Create the config and zone directories
+  ansible.builtin.file:
+    path: "{{ bind9__dir.path }}"
+    state: directory
+    owner: "{{ bind9__dir.owner }}"
+    group: "{{ bind9__os_group }}"
+    mode: "{{ bind9__dir.mode }}"
+  loop:
+    - { path: "{{ bind9__os_conf_dir }}", owner: root, mode: "0750" }
+    - { path: "{{ bind9__os_zone_dir }}", owner: "{{ bind9__os_user }}", mode: "0770" }
+    - { path: "{{ bind9__os_secondary_dir }}", owner: "{{ bind9__os_user }}", mode: "0770" }
+    - { path: "{{ bind9__os_pid_file | dirname }}", owner: "{{ bind9__os_user }}", mode: "0775" }
+  loop_control:
+    loop_var: bind9__dir
+    label: "{{ bind9__dir.path }}"
+
+# rndc-confgen -a writes a key named rndc-key, which named.conf includes.
+- name: Generate the rndc key
+  ansible.builtin.command:
+    cmd: "rndc-confgen -a -k rndc-key -c {{ bind9__os_rndc_key }}"
+    creates: "{{ bind9__os_rndc_key }}"
+  when: bind9_rndc_enabled | bool
+  notify: Reload BIND
+
+- name: Set the rndc key's permissions
+  ansible.builtin.file:
+    path: "{{ bind9__os_rndc_key }}"
+    owner: root
+    group: "{{ bind9__os_group }}"
+    mode: "0640"
+  when: bind9_rndc_enabled | bool
+
+- name: Write the TSIG keys
+  ansible.builtin.template:
+    src: tsig-keys.conf.j2
+    dest: "{{ bind9__os_conf_dir }}/tsig-keys.conf"
+    owner: root
+    group: "{{ bind9__os_group }}"
+    mode: "0640"
+  when: bind9_tsig_keys | length > 0
+  no_log: true
+  notify: Reload BIND
+
+- name: Install the GSS-TSIG keytab
+  ansible.builtin.copy:
+    src: "{{ bind9_gss_tsig_keytab_src }}"
+    dest: "{{ bind9__os_keytab }}"
+    owner: root
+    group: "{{ bind9__os_group }}"
+    mode: "0640"
+  when: bind9_gss_tsig_keytab_src | length > 0
+  notify: Reload BIND
+
+# Seeded once: after that, dynamic updates (and their journals) own the file.
+- name: Seed primary zone files
+  ansible.builtin.template:
+    src: zone.db.j2
+    dest: "{{ bind9__zone.file }}"
+    owner: "{{ bind9__os_user }}"
+    group: "{{ bind9__os_group }}"
+    mode: "0644"
+    force: false
+    validate: "{{ ('named-checkzone ' ~ bind9__zone.name ~ ' %s') if bind9_validate_config | bool else omit }}"
+  loop: "{{ bind9__zones | selectattr('type', 'eq', 'primary') | list }}"
+  loop_control:
+    loop_var: bind9__zone
+    label: "{{ bind9__zone.name }}"
+
+- name: Write named.conf
+  ansible.builtin.template:
+    src: named.conf.j2
+    dest: "{{ bind9__os_conf_file }}"
+    owner: root
+    group: "{{ bind9__os_group }}"
+    mode: "0640"
+    validate: "{{ 'named-checkconf %s' if bind9_validate_config | bool else omit }}"
+  notify: Reload BIND
+
+- name: Check the config and every zone
+  ansible.builtin.command:
+    argv: [named-checkconf, -z, "{{ bind9__os_conf_file }}"]
+  when: bind9_validate_config | bool
+  changed_when: false
+
+- name: Enable and start BIND
+  ansible.builtin.service:
+    name: "{{ bind9__os_service }}"
+    enabled: "{{ bind9_service_enabled }}"
+    state: "{{ bind9_service_state }}"
+  when: bind9_manage_service | bool

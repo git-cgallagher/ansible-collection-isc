@@ -1,12 +1,13 @@
 namespace: git_cgallagher
 name: isc
-version: 2.0.1
+version: 2.1.0
 readme: README.md
 authors:
   - Chris Gallagher (@git-cgallagher)
 description: >-
   Deploy ISC network services: Kea DHCP (v4/v6/DDNS, HA, on hosts or
-  Kubernetes) and the Stork monitoring server and agent.
+  Kubernetes), BIND 9 authoritative DNS, and the Stork monitoring server and
+  agent.
 license:
   - MIT
 tags:
@@ -18,6 +19,8 @@ tags:
   - stork
   - monitoring
   - kubernetes
+  - bind
+  - dns
 dependencies: {}
 repository: https://github.com/git-cgallagher/ansible-collection-isc
 documentation: https://github.com/git-cgallagher/ansible-collection-isc#readme

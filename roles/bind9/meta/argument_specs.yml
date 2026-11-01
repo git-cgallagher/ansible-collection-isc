@@ -1,0 +1,208 @@
+---
+argument_specs:
+  main:
+    short_description: ISC BIND 9 authoritative server (zones, TSIG, GSS-TSIG, update policies)
+    description:
+      - Installs BIND 9 from the distro's packages and writes named.conf, TSIG keys, the GSS-TSIG keytab and seed zone files.
+      - Primary zone files are written only when missing; dynamic updates own them afterwards.
+      - Pairs with git_cgallagher.isc.kea_dhcp as the target of Kea's dynamic DNS updates.
+    author:
+      - Chris Gallagher
+    options:
+      bind9_deployment:
+        type: str
+        description: How BIND is deployed. Only package exists today.
+        choices:
+          - package
+      bind9_bootstrap_python:
+        type: bool
+        description: Install python3 with raw before anything else (minimal images).
+      bind9_package_state:
+        type: str
+        description: State for the BIND packages.
+        choices:
+          - present
+          - latest
+      bind9_packages_extra:
+        type: list
+        elements: str
+        description: Extra packages installed with BIND.
+      bind9_manage_service:
+        type: bool
+        description: Enable and start named, and reload it on changes.
+      bind9_service_enabled:
+        type: bool
+        description: Enable named at boot.
+      bind9_service_state:
+        type: str
+        description: State for named.
+        choices:
+          - started
+          - stopped
+          - restarted
+      bind9_validate_config:
+        type: bool
+        description: Check named.conf (named-checkconf), seeded zones (named-checkzone) and every zone (named-checkconf -z).
+      bind9_listen_on:
+        type: list
+        elements: str
+        description: IPv4 listen addresses, e.g. [192.0.2.53] or [any]. Required.
+      bind9_listen_on_v6:
+        type: list
+        elements: str
+        description: IPv6 listen addresses; empty disables IPv6 listening.
+      bind9_port:
+        type: int
+        description: DNS port.
+      bind9_allow_query:
+        type: list
+        elements: str
+        description: allow-query address-match list, as written.
+      bind9_allow_transfer:
+        type: list
+        elements: str
+        description: allow-transfer address-match list, as written.
+      bind9_recursion:
+        type: bool
+        description: Enable recursion; needs bind9_allow_recursion.
+      bind9_allow_recursion:
+        type: list
+        elements: str
+        description: allow-recursion address-match list.
+      bind9_forwarders:
+        type: list
+        elements: str
+        description: Global forwarders.
+      bind9_forward:
+        type: str
+        description: Global forward mode, used with bind9_forwarders.
+        choices:
+          - first
+          - only
+      bind9_dnssec_validation:
+        type: str
+        description: dnssec-validation setting. Quote yes and no, or YAML reads them as booleans.
+        choices:
+          - auto
+          - "yes"
+          - "no"
+      bind9_tsig_keys:
+        type: list
+        elements: dict
+        no_log: true
+        description: TSIG keys written to tsig-keys.conf (mode 0640).
+        options:
+          name:
+            type: str
+            required: true
+            description: Key name, as used in update policies.
+          secret:
+            type: str
+            required: true
+            no_log: true
+            description: Base64 secret (tsig-keygen). Vault it.
+          algorithm:
+            type: str
+            default: hmac-sha256
+            description: TSIG algorithm.
+            choices:
+              - hmac-md5
+              - hmac-sha1
+              - hmac-sha224
+              - hmac-sha256
+              - hmac-sha384
+              - hmac-sha512
+      bind9_gss_tsig_keytab_src:
+        type: str
+        description: Controller path of the DNS service keytab for GSS-TSIG; empty disables GSS-TSIG.
+      bind9_zones:
+        type: list
+        elements: dict
+        description: Zones to serve.
+        options:
+          name:
+            type: str
+            required: true
+            description: Zone name.
+          type:
+            type: str
+            default: primary
+            description: Zone type.
+            choices:
+              - primary
+              - secondary
+              - forward
+          file:
+            type: str
+            description: Zone file path; default under the OS's writable zone directory.
+          update_policy:
+            type: list
+            elements: str
+            description: update-policy rules, as written (e.g. "grant kea-key zonesub ANY").
+          allow_update:
+            type: list
+            elements: str
+            description: allow-update address-match list (instead of update_policy).
+          primaries:
+            type: list
+            elements: str
+            description: Secondary zones, primary server addresses.
+          forwarders:
+            type: list
+            elements: str
+            description: Forward zones, forwarder addresses.
+          forward:
+            type: str
+            description: Forward zones, first or only (default only).
+            choices:
+              - first
+              - only
+          options:
+            type: str
+            description: Extra zone statements, as written.
+          ns:
+            type: list
+            elements: str
+            description: Primary zones, NS names for the seed file; the first is the SOA MNAME.
+          soa_email:
+            type: str
+            description: Primary zones, SOA RNAME (default hostmaster.<zone>.).
+          ttl:
+            type: int
+            description: Primary zones, seed file TTL.
+          records:
+            type: list
+            elements: str
+            description: Primary zones, initial records, as written.
+      bind9_zone_default_ttl:
+        type: int
+        description: Default TTL for seeded zone files.
+      bind9_rndc_enabled:
+        type: bool
+        description: Generate an rndc key when missing and listen for rndc on 127.0.0.1.
+      bind9_rndc_port:
+        type: int
+        description: rndc control port.
+      bind9_statistics_channels:
+        type: list
+        elements: dict
+        description: HTTP statistics channels.
+        options:
+          address:
+            type: str
+            required: true
+            description: Listen address.
+          port:
+            type: int
+            default: 8053
+            description: Listen port.
+          allow:
+            type: list
+            elements: str
+            description: Address-match list allowed to read statistics.
+      bind9_options_extra:
+        type: str
+        description: Text appended inside options { }, as written.
+      bind9_config_extra:
+        type: str
+        description: Text appended to named.conf, as written.

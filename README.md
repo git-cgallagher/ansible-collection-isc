@@ -8,6 +8,8 @@ Ansible collection for [ISC](https://www.isc.org/) network services:
 - **Kea DHCP**: DHCPv4, DHCPv6 and DDNS, with high availability, shared SQL
   lease databases and the configuration backend. Runs on hosts (from ISC's or
   the distro's packages) or on Kubernetes (Talos, EKS, generic).
+- **BIND 9**: an authoritative DNS server, from the distro's packages, ready
+  to take Kea's TSIG or GSS-TSIG dynamic updates.
 - **Stork**: the monitoring server, and agents that sit next to Kea on hosts,
   in containers, or as a sidecar in Kea's pods.
 
@@ -21,6 +23,7 @@ which is retired. See [Migrating](#migrating).
 | ansible-core | 2.18+ (CI: 2.18, 2.19, 2.20, 2.21) |
 | ISC Kea | 3.0 (LTS, default), 3.2, 2.6 (EOL, existing estates only) |
 | ISC Stork | 2.6 |
+| ISC BIND 9 | the distro's: 9.16 (EL 9), 9.18 (Debian 12, Ubuntu 24.04, AL2023), 9.20 (Alpine 3.22) |
 | Platforms | Debian 12/13, Ubuntu 22.04/24.04, RHEL/Rocky/Alma 8–10, Fedora, Amazon Linux 2023 (Stork), Alpine 3.20+ |
 | Kubernetes | Talos, EKS, any conformant cluster |
 
@@ -40,6 +43,7 @@ which is retired. See [Migrating](#migrating).
 |---|---|
 | [`git_cgallagher.isc.kea_dhcp`](roles/kea_dhcp/README.md) | Kea DHCPv4/v6/DDNS from packages, as containers on a host, or on Kubernetes. HA (hot-standby, load-balancing, passive-backup, hub-and-spoke), shared SQL leases, config backend, HTTP(S) API with auth, and dynamic DNS for Microsoft DNS / AD, BIND (GSS-TSIG) or any RFC 2136 server (TSIG). |
 | [`git_cgallagher.isc.kea_dhcp_msdns`](roles/kea_dhcp_msdns/README.md) | Prepares Active Directory / Microsoft DNS (or Samba AD) for Kea's GSS-TSIG updates: service account with UPN, SPN, DnsUpdateProxy, zones, keytab. Windows and Samba backends. |
+| [`git_cgallagher.isc.bind9`](roles/bind9/README.md) | BIND 9 authoritative server from distro packages: primary/secondary/forward zones, TSIG keys, GSS-TSIG keytab, update policies, rndc, statistics channels. Seeds zone files once, then leaves them to dynamic updates. |
 | [`git_cgallagher.isc.stork_server`](roles/stork_server/README.md) | Stork server: packages + optional local PostgreSQL, or a Kubernetes Deployment. Rotates the `admin`/`admin` bootstrap password. |
 | [`git_cgallagher.isc.stork_agent`](roles/stork_agent/README.md) | Stork agent next to Kea: native package, container + systemd, or a Kubernetes sidecar spec for the Kea pod. Unattended registration. |
 | [`git_cgallagher.isc.stork_repository`](roles/stork_repository/README.md) | ISC's Cloudsmith Stork package repository (deb/rpm/apk). Used by the Stork roles. |

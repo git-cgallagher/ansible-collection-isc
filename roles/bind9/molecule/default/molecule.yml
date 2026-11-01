@@ -1,0 +1,47 @@
+---
+# bind9 from distro packages in plain containers (no init system): the role
+# runs with bind9_manage_service: false, and verify.yml starts named in the
+# foreground, then checks that zones answer, a TSIG-signed update lands, an
+# unsigned one is refused, and rndc and the statistics channel respond.
+# The distros ship BIND for amd64 and arm64, so these run natively.
+platforms:
+  - name: bind9-al2023
+    image: amazonlinux:2023
+  - name: bind9-rocky9
+    image: rockylinux/rockylinux:9
+  - name: bind9-debian12
+    image: debian:12-slim
+  - name: bind9-ubuntu2404
+    image: ubuntu:24.04
+  - name: bind9-alpine
+    image: alpine:3.22
+provisioner:
+  inventory:
+    group_vars:
+      all:
+        bind9_bootstrap_python: true
+        bind9_manage_service: false
+        bind9_listen_on: [127.0.0.1]
+        bind9_allow_transfer: [127.0.0.1]
+        # An obvious placeholder (base64 of "molecule-only-not-a-secret").
+        bind9_tsig_keys:
+          - { name: kea-key, secret: bW9sZWN1bGUtb25seS1ub3QtYS1zZWNyZXQ= }
+        bind9_statistics_channels:
+          - { address: 127.0.0.1, port: 8053, allow: [127.0.0.1] }
+        bind9_zones:
+          - name: example.test
+            ns: [ns1.example.test.]
+            records: ["ns1 IN A 127.0.0.1"]
+            update_policy: ["grant kea-key zonesub ANY"]
+          - name: 2.0.192.in-addr.arpa
+            ns: [ns1.example.test.]
+            update_policy: ["grant kea-key zonesub PTR"]
+          - name: static.test
+            ns: [ns1.example.test.]
+            records: ["www IN A 192.0.2.80"]
+          - name: secondary.test
+            type: secondary
+            primaries: [192.0.2.1]
+          - name: forward.test
+            type: forward
+            forwarders: [192.0.2.2]

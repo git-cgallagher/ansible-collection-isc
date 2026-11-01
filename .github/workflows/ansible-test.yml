@@ -218,3 +218,23 @@ jobs:
           constraints: .github/ci/requirements.txt
       - working-directory: roles/stork_server
         run: molecule test -s default
+
+  molecule-bind9:
+    # BIND from distro packages; named in the foreground, TSIG-signed updates land.
+    name: molecule bind9 (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [bind9-al2023, bind9-rocky9, bind9-debian12, bind9-ubuntu2404, bind9-alpine]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
+        with:
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
+      - working-directory: roles/bind9
+        run: molecule test -s default --platform-name ${{ matrix.platform }}

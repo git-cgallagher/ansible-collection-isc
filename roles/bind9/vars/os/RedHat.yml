@@ -1,0 +1,17 @@
+---
+# RHEL, Rocky, Alma, Fedora and Amazon Linux 2023 (bind 9.16 on EL9, 9.18 on
+# AL2023). Verified on rockylinux:9 and amazonlinux:2023. SELinux lets named
+# write only under /var/named/dynamic, /var/named/slaves and /var/named/data.
+bind9__os_packages: [bind, bind-utils]
+bind9__os_service: named
+bind9__os_user: named
+bind9__os_group: named
+bind9__os_conf_file: /etc/named.conf
+bind9__os_conf_dir: /etc/named
+bind9__os_directory: /var/named
+bind9__os_zone_dir: /var/named/dynamic
+bind9__os_secondary_dir: /var/named/slaves
+bind9__os_rndc_key: /etc/rndc.key
+# named.service sets KRB5_KTNAME to this path.
+bind9__os_keytab: /etc/named.keytab
+bind9__os_pid_file: /run/named/named.pid
