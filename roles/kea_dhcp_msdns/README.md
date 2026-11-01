@@ -10,11 +10,11 @@ It has two backends:
 
 ## What it does
 
-1. **Service account** (`kea` by default). It's created with a password that never expires; an existing account's password is left alone. On Windows, an existing account is moved into `kea_dhcp_msdns_service_account_ou` when that is set.
+1. **Service account** (`kea` by default). It's created with a password that never expires; an existing account's password is left alone. On Windows, the account is found by sAMAccountName wherever it is, and moved into `kea_dhcp_msdns_service_account_ou` when that is set (the Molecule scenario pre-creates it in Users and checks the move).
 2. **UPN set to Kea's client principal** (`DHCP/kea.<domain>@<REALM>`). AD only issues Kerberos tickets to a UPN, not to an SPN alone. Without this, Kea fails with *bad client credentials*. On Windows `ktpass -mapuser` does the same; on Samba the role sets it with `ldbmodify`.
 3. **SPN** `DHCP/kea.<domain>` on the account.
 4. **DnsUpdateProxy** membership (`kea_dhcp_msdns_dnsupdateproxy`), so Kea can replace records that clients registered themselves.
-5. **Zones:** the forward and reverse zones are created if missing (AD-integrated). On Windows, their dynamic-update setting is made `Secure`.
+5. **Zones:** the forward and reverse zones are created if missing (AD-integrated). On Windows, their dynamic-update setting is made `Secure` and their replication scope `kea_dhcp_msdns_zone_replication` (default `Domain`). Both are desired state for existing zones too: a zone in another scope is converted, and a file-backed zone fails, since it can't be converted to AD-integrated.
 6. **Keytab:**
    - It's produced on the DC (Windows: `ktpass`; Samba: `samba-tool domain exportkeytab`, checked with `kinit` when available).
    - It's fetched to the **controller** path `kea_dhcp_msdns_keytab_dest` with mode 0600, and the copy on the DC is deleted.

@@ -11,8 +11,13 @@
 # the password on every run, which bumps the account's key version and
 # invalidates the keytab already deployed to Kea. ktpass sets it when a keytab
 # is produced.
+# identity finds the account by sAMAccountName wherever it is; without it the
+# module only looks at CN=<name> under path, and an account that already
+# exists elsewhere would be created a second time (and fail). With identity,
+# an account outside path is moved there.
 - name: Ensure the service account, UPN and SPN
   microsoft.ad.user:
+    identity: "{{ kea_dhcp_msdns_service_account }}"
     name: "{{ kea_dhcp_msdns_service_account }}"
     sam_account_name: "{{ kea_dhcp_msdns_service_account }}"
     path: "{{ kea_dhcp_msdns_service_account_ou | default(omit, true) }}"
@@ -30,12 +35,15 @@
     state: present
 
 # The module's choices are lower case; the role keeps the PowerShell casing
-# (Secure, NonsecureAndSecure) in its argument spec.
+# (Secure, NonsecureAndSecure, Domain, ...) in its argument spec. replication is
+# desired state for existing zones too: win_dns_zone sets it on every run, so an
+# AD-integrated zone with another scope is converted, and a file-backed zone
+# fails (the module refuses that conversion).
 - name: Ensure the zones exist with secure dynamic updates
   ansible.windows.win_dns_zone:
     name: "{{ item | regex_replace('\\.$', '') }}"
     type: primary
-    replication: domain
+    replication: "{{ kea_dhcp_msdns_zone_replication | lower }}"
     dynamic_update: "{{ kea_dhcp_msdns_dynamic_update | lower }}"
     state: present
   loop: "{{ kea_dhcp_msdns_forward_zones + kea_dhcp_msdns_reverse_zones }}"

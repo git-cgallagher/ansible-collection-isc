@@ -29,6 +29,23 @@
         # Kerberos tolerates 5 minutes of skew; Kea's container uses the runner's clock.
         ad_forest_sync_clock: true
 
+    # Brownfield: the account already exists in Users without UPN or SPN, and
+    # the role is pointed at an OU. Converge must find it and move it there.
+    - name: Create the OU the role is pointed at
+      microsoft.ad.ou:
+        name: Services
+        path: "DC={{ lab_domain.split('.') | join(',DC=') }}"
+        state: present
+
+    - name: Pre-create the service account in Users
+      microsoft.ad.user:
+        identity: kea
+        name: kea
+        password: "{{ lab_kea_password }}"
+        update_password: on_create
+        enabled: true
+        state: present
+
     - name: Show the domain
       ansible.windows.win_powershell:
         script: |
