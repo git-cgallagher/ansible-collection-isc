@@ -36,8 +36,8 @@ The Kea container uses `--network host`, so its config points at `127.0.0.1:1535
 You need Linux x86-64 with `/dev/kvm`, `qemu-system-x86_64` and `qemu-img`, Docker, about 20 GB free in `$MOLECULE_LAB_DIR` (default `~/.cache/molecule-lab`), and ports 5985, 15353 and 18088 free on `127.0.0.1`. **It can't run on macOS or Apple Silicon.**
 
 ```bash
-pip install ansible-core molecule "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.0"
-ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.0
+pip install ansible-core molecule "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.1"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.1
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher
 ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 cd roles/kea_dhcp_msdns
