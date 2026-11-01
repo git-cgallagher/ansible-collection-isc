@@ -32,6 +32,10 @@
       ansible.builtin.include_tasks: runtime_case.yml
       vars: { argspec_role: kea_dhcp_msdns, kea_dhcp_msdns_backend: bogus }
 
+    - name: Reject a bad kea_dhcp_msdns zone replication scope
+      ansible.builtin.include_tasks: runtime_case.yml
+      vars: { argspec_role: kea_dhcp_msdns, kea_dhcp_msdns_zone_replication: bogus }
+
     - name: Reject a bad bind9 zone type
       ansible.builtin.include_tasks: runtime_case.yml
       vars: { argspec_role: bind9, bind9_zones: [{ name: example.test, type: bogus }] }

@@ -14,6 +14,7 @@
           $Ansible.Changed = $false
           $u = Get-ADUser -Identity kea -Properties userPrincipalName, servicePrincipalName, memberOf
           [ordered]@{
+              dn           = $u.DistinguishedName
               upn          = $u.userPrincipalName
               spns         = @($u.servicePrincipalName)
               update_proxy = [bool]($u.memberOf -match '^CN=DnsUpdateProxy,')
@@ -22,9 +23,10 @@
           }
       register: kea_win_ad
 
-    - name: UPN equals the client principal; SPN, DnsUpdateProxy and secure zones are set
+    - name: Account moved into the OU; UPN equals the client principal; SPN, DnsUpdateProxy and secure zones are set
       ansible.builtin.assert:
         that:
+          - kea_win_ad.output[0].dn == 'CN=kea,' ~ lab_account_ou
           - kea_win_ad.output[0].upn == 'DHCP/kea.' ~ lab_domain ~ '@' ~ lab_realm
           - ('DHCP/kea.' ~ lab_domain) in kea_win_ad.output[0].spns
           - kea_win_ad.output[0].update_proxy

@@ -13,9 +13,9 @@ The VM comes from the `windows_vm` kind of the [`molecule-git-cgallagher`](https
 | Step | Asserted |
 |---|---|
 | prepare | The VM is renamed `dc01`, promoted with DNS, and its clock is set from the controller (Kerberos allows 5 minutes of skew). The wait after the reboot also requires the domain zone's replication scope to have left its transient post-promotion `Legacy` state, which `win_dns_zone` can't update. |
-| converge | Both roles apply. |
+| converge | Both roles apply. prepare pre-created the `kea` account in Users without UPN or SPN; the role, pointed at `OU=Services`, finds it by sAMAccountName and moves it there. |
 | idempotence | A second run changes nothing. In particular, the keytab isn't regenerated, because `ktpass` would bump the key version. |
-| verify, DC | The account's UPN equals Kea's client principal, the SPN and DnsUpdateProxy membership are set, and both zones are `Secure`. |
+| verify, DC | The account's DN is `CN=kea,OU=Services,...`, its UPN equals Kea's client principal, the SPN and DnsUpdateProxy membership are set, and both zones are `Secure`. |
 | verify, Kea | `kinit` works with the deployed keytab and `krb5.conf`. |
 | verify, DNS | `lease4-add` plus `lease4-resend-ddns` produce GSS-TSIG signed updates. The **A and PTR records are read back from Microsoft DNS** with `Get-DnsServerResourceRecord`. A second address for the same client moves the A record. No `GSS_TSIG_VERIFY_FAILED` appears in the log. |
 
