@@ -1,0 +1,12 @@
+---
+# Stork server from ISC's packages, with a local PostgreSQL. Host-specific
+# settings are in inventory.yml next to this file.
+#
+# Run this before any play that installs Stork agents: they read their
+# registration token from this server's API.
+
+- name: Stork server
+  hosts: stork_server
+  become: true
+  roles:
+    - role: git_cgallagher.isc.stork_server

@@ -1,0 +1,31 @@
+---
+# Kea DHCP with Microsoft DNS updates (GSS-TSIG) and Stork agents.
+# Everything host-specific is in inventory.yml next to this file.
+#
+# Run examples/stork_server/package first: the agents (last play) read their
+# registration token from the Stork server's API.
+#
+# Play 1 runs on the domain controller and needs the ansible.windows and
+# microsoft.ad collections (both in the collection's requirements.yml).
+# Plays 2 and 3 run on the Kea hosts.
+
+- name: Prepare Active Directory and Microsoft DNS for Kea
+  hosts: dc
+  gather_facts: true
+  roles:
+    - role: git_cgallagher.isc.kea_dhcp_msdns
+
+- name: Kea DHCP with ms-dns updates
+  hosts: kea
+  become: true
+  gather_facts: false  # lets kea_dhcp_bootstrap_python install Python first on minimal hosts
+  vars:
+    kea_dhcp_bootstrap_python: true
+  roles:
+    - role: git_cgallagher.isc.kea_dhcp
+
+- name: Stork agents next to Kea
+  hosts: kea
+  become: true
+  roles:
+    - role: git_cgallagher.isc.stork_agent

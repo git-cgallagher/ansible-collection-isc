@@ -1,0 +1,34 @@
+---
+# One Stork server on Ubuntu 24.04 (any platform stork_repository supports
+# works the same way), with PostgreSQL installed on the same host.
+#
+# Stork keeps all of its state in PostgreSQL. Run one server; for high
+# availability, point it at an HA database (stork_server_db_install_local:
+# false) rather than running several servers.
+#
+# Secrets come from Ansible Vault (ansible-vault create group_vars/all/vault.yml):
+#   vault_stork_db_password    - the PostgreSQL role the server connects as
+#   vault_stork_admin_password - replaces Stork's admin/admin bootstrap login.
+#                                Stork's policy: 12+ characters with upper and
+#                                lower case, a digit and a special character.
+all:
+  children:
+    stork_server:
+      hosts:
+        stork: {ansible_host: 192.0.2.20}
+      vars:
+        stork_server_version: "2.6.0"
+        # Install PostgreSQL here and create the role, database and pgcrypto.
+        stork_server_db_install_local: true
+        stork_server_db_password: "{{ vault_stork_db_password }}"
+        stork_server_admin_password: "{{ vault_stork_admin_password }}"
+        # The UI and REST API. Agents register here (stork_agent_server_url),
+        # so open TCP 8080 from the Kea hosts and from your browser.
+        stork_server_rest_host: 0.0.0.0
+        stork_server_rest_port: 8080
+        # HTTPS: {cert, key} paths on the host; add ca for mutual TLS.
+        # stork_server_tls: {cert: /etc/stork/server.crt, key: /etc/stork/server.key}
+        # /metrics has no authentication; leave it off unless it's firewalled.
+        stork_server_enable_metrics: false
+        # Any other STORK_* setting, for example OIDC login.
+        stork_server_extra_env: {}

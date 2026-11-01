@@ -64,6 +64,8 @@ mode.
         stork_server_admin_password: "{{ vault_stork_admin_password }}"
 ```
 
+A complete inventory is in [`examples/stork_server/package`](../../examples/stork_server/package/).
+
 ## License
 
 MIT

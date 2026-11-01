@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.1 — 2026-11-01
+
+No role behaviour changes.
+
+- New examples, each a `playbook.yml` plus the `inventory.yml` that holds
+  every setting:
+  - [`examples/kea_dhcp/msdns-stork`](examples/kea_dhcp/msdns-stork/): a Kea
+    3.0 hot-standby pair updating Microsoft DNS over GSS-TSIG, with the
+    domain controller prepared by `kea_dhcp_msdns` (PSRP connection in the
+    inventory) and a Stork agent next to each Kea. The domain, reverse zones
+    and keytab path are single inventory variables shared by both roles.
+  - [`examples/stork_server/package`](examples/stork_server/package/): the
+    Stork server from ISC's packages with a local PostgreSQL, the required
+    admin password, and the TLS, metrics and OIDC knobs shown commented out.
+- `examples/README.md` lists every example and the order to run them in (the
+  server before any agents, which read their token from its API).
+
 ## 2.2.0 — 2026-11-01
 
 `kea_dhcp_msdns` Windows backend: the service account and the zones are now
