@@ -1,8 +1,9 @@
-# pip constraints for every CI job in ansible-test.yml and windows-dc.yml
-# (`pip install -c .github/ci/requirements.txt <packages>`). Each job still
-# names its own packages; this file only fixes their versions, so all jobs
-# run the same tools. Constraints can't carry extras: `molecule-plugins[docker]`
-# stays on the install line.
+# pip constraints for every CI job in ansible-test.yml and windows-dc.yml:
+# `pip install -c .github/ci/requirements.txt <packages>`, or the `constraints`
+# input of the setup-molecule action, which the Molecule jobs use.
+# Each job still names its own packages; this file only fixes their versions,
+# so all jobs run the same tools. The molecule-git-cgallagher driver isn't
+# here: the action's pinned SHA versions it.
 #
 # ansible-core is a range, not a pin: CI tests the minors the sanity matrix
 # covers (stable-2.18 .. stable-2.21). Without the cap, lint, the Kea render and
@@ -14,10 +15,8 @@ ansible-core>=2.18,<2.22
 
 # Exact pins, bumped monthly by Dependabot.
 ansible-lint==26.10.1
-docker==7.2.0
 kubernetes==37.0.1
 molecule==26.10.0
-molecule-plugins==26.10.12
 pypsrp==0.9.1
 pyyaml==6.0.3
 yamllint==1.38.0

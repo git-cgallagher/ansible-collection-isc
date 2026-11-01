@@ -345,7 +345,7 @@ See [docs/stork-kubernetes.md](../../docs/stork-kubernetes.md).
 The collection's CI runs lint, the render checks and Molecule (one job per distro) on every push, on every pull request, and weekly. A green merge to `main` releases the collection to Galaxy. To run the same checks locally from the collection root, you need the following installed:
 
 - **`tests/kea_dhcp/run.sh`**: `ansible-core`, `kubernetes.core`, PyYAML, `openssl` and Docker. On Apple silicon, Docker also needs amd64 emulation.
-- **Molecule**: `molecule`, `molecule-plugins[docker]`, the `docker` Python SDK and the `community.docker` collection.
+- **Molecule**: `molecule`, the [`molecule-git-cgallagher`](https://github.com/git-cgallagher/ansible-collection-molecule) driver and its `git_cgallagher.molecule` collection (it brings `community.docker`), and Docker. The repo's `AGENTS.md` has the install lines.
 
 ```bash
 tests/kea_dhcp/run.sh

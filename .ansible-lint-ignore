@@ -8,8 +8,6 @@ roles/kea_dhcp/molecule/dns/verify.yml var-naming[no-role-prefix] skip
 roles/kea_dhcp/molecule/ha3/verify.yml var-naming[no-role-prefix] skip
 roles/kea_dhcp_msdns/molecule/default/prepare.yml var-naming[no-role-prefix] skip
 roles/kea_dhcp_msdns/molecule/default/verify.yml var-naming[no-role-prefix] skip
-roles/kea_dhcp_msdns/molecule/windows/create.yml var-naming[no-role-prefix] skip
-roles/kea_dhcp_msdns/molecule/windows/destroy.yml var-naming[no-role-prefix] skip
 roles/kea_dhcp_msdns/molecule/windows/prepare.yml var-naming[no-role-prefix] skip
 roles/kea_dhcp_msdns/molecule/windows/verify.yml var-naming[no-role-prefix] skip
 roles/stork_agent/molecule/container/prepare.yml var-naming[no-role-prefix] skip

@@ -4,18 +4,10 @@
 # (bind9-gss-tsig), one with a TSIG key (rfc2136). Secrets (the Kea keytab,
 # the TSIG key) are generated in prepare.yml and only ever live in Molecule's
 # ephemeral directory. ns1 runs at the host's native architecture.
-dependency:
-  name: galaxy
-  options:
-    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/../../requirements.yml
-driver:
-  name: docker
 platforms:
   - name: ns1
     hostname: ns1.example.test
     image: debian:12
-    command: sleep infinity
-    pre_build_image: true
     docker_networks: &kea_dns_network
       - name: kea-dns
         ipam_config:
@@ -27,8 +19,6 @@ platforms:
   - name: kea-gss
     image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
-    command: sleep infinity
-    pre_build_image: true
     docker_networks: *kea_dns_network
     networks:
       - name: kea-dns
@@ -36,26 +26,7 @@ platforms:
   - name: kea-tsig
     image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
     platform: linux/amd64
-    command: sleep infinity
-    pre_build_image: true
     docker_networks: *kea_dns_network
     networks:
       - name: kea-dns
         ipv4_address: 172.29.50.21
-provisioner:
-  name: ansible
-  env:
-    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
-    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/../../.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/../../collections:~/.ansible/collections
-verifier:
-  name: ansible
-scenario:
-  test_sequence:
-    - dependency
-    - destroy
-    - create
-    - prepare
-    - converge
-    - idempotence
-    - verify
-    - destroy

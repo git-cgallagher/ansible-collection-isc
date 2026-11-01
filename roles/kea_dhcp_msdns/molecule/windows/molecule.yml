@@ -1,22 +1,16 @@
 ---
 # kea_dhcp_dns_integration: ms-dns against a real Windows Server 2022 domain
-# controller running Microsoft DNS. Molecule boots the DC under QEMU/KVM
-# (create.yml, from git_cgallagher.gpo's domain_lab), kea_dhcp_msdns prepares
-# AD with its Windows backend (account, UPN, SPN, DnsUpdateProxy, zones,
-# ktpass keytab), kea_dhcp deploys Kea in an Amazon Linux 2023 x86-64
-# container, and verify checks that Kea's signed updates land in Microsoft DNS.
-# Needs a Linux x86-64 host with /dev/kvm, Docker and ~20 GB free in
-# $KEA_LAB_DIR; ~15 min. See README.md.
-dependency:
-  name: galaxy
-  options:
-    requirements-file: ${MOLECULE_SCENARIO_DIRECTORY}/requirements.yml
-driver:
-  name: default
-  options:
-    managed: true
+# controller running Microsoft DNS. Molecule boots the DC under QEMU/KVM (the
+# molecule-git-cgallagher driver's windows_vm kind, which started as
+# git_cgallagher.windows' tests/domain_lab), kea_dhcp_msdns prepares AD with
+# its Windows backend (account, UPN, SPN, DnsUpdateProxy, zones, ktpass
+# keytab), kea_dhcp deploys Kea in an Amazon Linux 2023 x86-64 container, and
+# verify checks that Kea's signed updates land in Microsoft DNS. Needs a Linux
+# x86-64 host with /dev/kvm, Docker and ~20 GB free in $MOLECULE_LAB_DIR;
+# ~15 min. See README.md.
 platforms:
   - name: dc01
+    kind: windows_vm
     # jborean93's packer-windoze box: a sysprepped Windows Server 2022
     # evaluation image built for Ansible WinRM/PSRP testing (microsoft.ad's
     # own integration tests use it). Pinned by version + SHA-256.
@@ -28,15 +22,15 @@ platforms:
     cpus: 2
     winrm_port: 5985
     # Host-side ports forwarded to the DC's DNS (53) and Kerberos KDC (88).
-    dns_port: 15353
-    kdc_port: 18088
+    forwards:
+      - {port: 15353, guest_port: 53, protocols: [tcp, udp]}
+      - {port: 18088, guest_port: 88, protocols: [tcp, udp]}
+  # Host network: the DC's forwarded ports on 127.0.0.1 are reachable from it.
   - name: kea-win
     image: public.ecr.aws/amazonlinux/amazonlinux:2023-minimal
+    platform: linux/amd64
+    network_mode: host
 provisioner:
-  name: ansible
-  env:
-    # Expose this checkout as git_cgallagher.isc (see AGENTS.md).
-    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/../../.molecule-collections:${MOLECULE_PROJECT_DIRECTORY}/../../collections:~/.ansible/collections
   inventory:
     host_vars:
       dc01:
@@ -45,9 +39,8 @@ provisioner:
         ansible_psrp_reconnection_retries: 3
     group_vars:
       all:
-        # Box cache, VM disk, pidfile and monitor socket (CI points it at the
-        # runner's large /mnt disk).
-        lab_dir: "{{ lookup('ansible.builtin.env', 'KEA_LAB_DIR') | default(lookup('ansible.builtin.env', 'HOME') ~ '/.cache/kea-domain-lab', true) }}"
+        lab_dns_port: 15353
+        lab_kdc_port: 18088
         lab_hostname: dc01
         lab_domain: kealab.test
         lab_netbios: KEALAB
@@ -61,7 +54,5 @@ provisioner:
         lab_subnet: 10.60.0.0/24
         lab_reverse_zone: 0.60.10.in-addr.arpa
         lab_keytab: "{{ lookup('ansible.builtin.env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/kea.keytab"
-verifier:
-  name: ansible
 scenario:
   test_sequence: [dependency, destroy, syntax, create, prepare, converge, idempotence, verify, destroy]

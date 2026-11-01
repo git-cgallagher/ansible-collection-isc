@@ -35,6 +35,10 @@ docs/                    stork-research, stork-kubernetes, testing, kea_dhcp-cha
 ## Checks (all must pass before a change is done)
 
 ```bash
+# The tools at CI's versions, plus the Molecule driver and its collection (one tag for both):
+pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint molecule \
+  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.0"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.0
 ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0
@@ -155,9 +159,20 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - ansible-lint treats `register:` names in `roles/<role>/molecule/` playbooks as role variables
   (`var-naming[no-role-prefix]`). `.ansible-lint-ignore` skips that one rule per scenario file; a new
   scenario file that registers variables needs a line there. The rule still applies to role code.
-- Molecule loads **every** scenario in a role's `molecule/` dir, so a job needs every driver its
-  siblings use: `windows-dc` installs `molecule-plugins[docker]` although `windows` itself uses the
-  default driver ("Failed to find driver docker" otherwise).
+- **Every scenario runs on one driver, `molecule-git-cgallagher`** (2.0.1; repo
+  `git-cgallagher/ansible-collection-molecule`). `.config/molecule/config.yml` holds what they share
+  (driver, galaxy dependency, collections path, verifier, test sequence), and Molecule merges it under
+  each scenario from the role directory, so a `molecule.yml` is only platforms, inventory and any
+  different `test_sequence`. Platforms pick a `kind`: `docker` (the default; molecule-plugins'
+  key names) or `windows_vm` (the Windows DC). A key the kind doesn't know fails the run, so check
+  new keys against the driver's README. Molecule loads every scenario in a role's `molecule/` dir,
+  which is why a single driver matters: the old mixed drivers made `windows-dc` install
+  molecule-plugins for a scenario it never ran.
+- **CI installs Molecule through the `setup-molecule` action**, pinned by SHA with a `# vX.Y.Z`
+  comment (Dependabot bumps it), under `.github/ci/requirements.txt` via its `constraints` input.
+  The lint job doesn't need it: ansible-lint passes without `git_cgallagher.molecule` (it doesn't
+  resolve the Windows scenario's dynamic `include_role` of `ad_forest`; checked 2026-10-31 with only
+  `requirements.yml`'s collections installed).
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not

@@ -19,7 +19,6 @@
   hosts: kea-win
   gather_facts: false
   vars:
-    lab_dc: "{{ molecule_yml.platforms | selectattr('name', 'equalto', 'dc01') | first }}"
     kea_dhcp_bootstrap_python: true
     kea_dhcp_manage_service: false
     kea_dhcp_version_series: "3.0"
@@ -38,8 +37,8 @@
       servers:
         - name: "{{ lab_hostname }}"
           ip: 127.0.0.1
-          port: "{{ lab_dc.dns_port }}"
-      kdcs: ["127.0.0.1:{{ lab_dc.kdc_port }}"]
+          port: "{{ lab_dns_port }}"
+      kdcs: ["127.0.0.1:{{ lab_kdc_port }}"]
       reverse_zones: ["{{ lab_reverse_zone }}"]
       keytab_src: "{{ lab_keytab }}"
       install_krb5_tools: true

@@ -1,6 +1,6 @@
 namespace: git_cgallagher
 name: isc
-version: 2.0.0
+version: 2.0.1
 readme: README.md
 authors:
   - Chris Gallagher (@git-cgallagher)
@@ -28,6 +28,7 @@ build_ignore:
   - collections
   - roles/*/molecule
   - .molecule-collections
+  - .config
   - tests
   - '*.tar.gz'
   - .ansible-lint

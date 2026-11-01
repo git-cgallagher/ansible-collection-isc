@@ -13,9 +13,10 @@ on:
 permissions:
   contents: read
 
-# Every pip install below uses .github/ci/requirements.txt as constraints, so
-# all jobs run the same ansible-core (capped to the sanity matrix's range) and
-# tool versions. The sanity job installs its own ansible-core via the action.
+# Every pip install below uses .github/ci/requirements.txt as constraints
+# (setup-molecule's `constraints` input in the Molecule jobs), so all jobs run
+# the same ansible-core (capped to the sanity matrix's range) and tool
+# versions. The sanity job installs its own ansible-core via the action.
 env:
   PY_COLORS: '1'
   ANSIBLE_FORCE_COLOR: '1'
@@ -37,7 +38,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           # Paths that are NOT in the tarball (galaxy.yml build_ignore).
-          ignore='^(\.github/|roles/[^/]+/molecule/|tests/|AGENTS\.md$|\.ansible-lint(-ignore)?$|\.yamllint$|\.gitignore$)'
+          ignore='^(\.github/|\.config/|roles/[^/]+/molecule/|tests/|AGENTS\.md$|\.ansible-lint(-ignore)?$|\.yamllint$|\.gitignore$)'
           shipped=$(git diff --name-only "$BASE"...HEAD | grep -Ev "$ignore" || true)
           if [ -z "$shipped" ]; then echo "No shipped files changed; no release needed."; exit 0; fi
           echo "Shipped files changed:"; echo "$shipped" | sed 's/^/  /'
@@ -82,8 +83,6 @@ jobs:
       - run: |
           pip install -c .github/ci/requirements.txt ansible-core ansible-lint yamllint
           ansible-galaxy collection install -r requirements.yml
-          # microsoft.ad: the Windows DC scenario's prepare (not a role dependency).
-          ansible-galaxy collection install -r roles/kea_dhcp_msdns/molecule/windows/requirements.yml
       - run: yamllint .
       - run: ansible-lint
 
@@ -115,17 +114,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
         run: molecule test -s default --platform-name ${{ matrix.platform }}
 
@@ -138,17 +131,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
         run: molecule test -s ha3
 
@@ -160,17 +147,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
         run: molecule test -s container
 
@@ -183,17 +164,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/stork_agent
         run: molecule test -s container
 
@@ -205,17 +180,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp
         run: molecule test -s dns
 
@@ -227,17 +196,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: |
-          pip install -c .github/ci/requirements.txt ansible-core molecule 'molecule-plugins[docker]' docker
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/kea_dhcp_msdns
         run: molecule test -s default
 
@@ -248,13 +211,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@b2601b3f376da3e03f99c18ebc79d9d7a37e9c7f  # v0.2.0
         with:
-          python-version: '3.13'
-      - run: pip install -c .github/ci/requirements.txt ansible-core molecule "molecule-plugins[docker]"
-      - name: Expose the checkout as git_cgallagher.isc
-        run: |
-          mkdir -p .molecule-collections/ansible_collections/git_cgallagher
-          ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
+          collection: git_cgallagher.isc
+          requirements: requirements.yml
+          constraints: .github/ci/requirements.txt
       - working-directory: roles/stork_server
         run: molecule test -s default
