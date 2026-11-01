@@ -70,6 +70,10 @@ tests/argument_specs/run.sh         # every role: spec matches defaults, ansible
 (cd roles/stork_agent && molecule test -s container)
 ```
 
+CI's sanity matrix covers the released `stable-2.18`…`stable-2.21` branches only. ansible-core
+`devel` is no longer tested (owner decision, 2026-11-01); add each new stable branch to the matrix
+instead.
+
 Sanity needs an `ansible_collections/git_cgallagher/isc` checkout:
 `ansible-test sanity --venv`. The tests reach the roles as `git_cgallagher.isc.*`
 through a collections path created at run time. Never commit a directory
