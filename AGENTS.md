@@ -54,8 +54,8 @@ Or install the tools yourself:
 export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
 docker run --rm "$RUNTIME_IMAGE" cat /usr/share/ansible-runtime/constraints.txt > /tmp/constraints.txt
 pip install -c /tmp/constraints.txt ansible-core ansible-lint yamllint molecule \
-  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.4.0"
-ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.4.0
+  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.5.0"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.5.0
 ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0
@@ -211,7 +211,10 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
     checkout (`.cache/tmp`), since files mounted into test containers must be on a path the host
     daemon sees, and marks the checkout `safe.directory` (the image runs as root).
   - **Still on `setup-molecule`:** `windows-dc.yml`, because its Windows VM needs KVM and QEMU on
-    the runner itself.
+    the runner itself. Since setup-molecule v0.5.0 (2026-11-02) its collections are copied out of
+    the `RUNTIME_IMAGE` image (`collections-image`), never downloaded from Galaxy, and
+    `requirements.yml` is only checked against them offline. A collection or version the image
+    lacks fails the step: pin it in ansible-runtime first.
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not

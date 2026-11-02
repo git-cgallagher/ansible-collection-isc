@@ -44,30 +44,29 @@ jobs:
       # Python packages and collections at the versions of the ansible-runtime image ansible-test.yml pins
       # (its constraints.txt; ansible-runtime's shared dependency model). .cache/ is gitignored.
       - name: Read the ansible-runtime image's pins
+        id: runtime
         timeout-minutes: 10
         run: |
           image=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
           [ -n "$image" ] || { echo "::error::RUNTIME_IMAGE not found in ansible-test.yml"; exit 1; }
           mkdir -p .cache
           docker run --rm "$image" cat /usr/share/ansible-runtime/constraints.txt > .cache/constraints.txt
-          # Every collection pin except git_cgallagher.molecule: setup-molecule installs that one
-          # from its own pinned commit, which may be newer than the image's.
-          docker run --rm "$image" python -c 'import sys, yaml
-          d = yaml.safe_load(open("/usr/share/ansible-runtime/collections.yml"))
-          d["collections"] = [c for c in d["collections"] if "ansible-collection-molecule" not in c["name"]]
-          yaml.safe_dump(d, sys.stdout, sort_keys=False)' > .cache/collections.yml
+          echo "image=$image" >> "$GITHUB_OUTPUT"
 
       # Ansible, Molecule and the molecule-git-cgallagher driver (versions from
-      # the image's constraints above), the git_cgallagher.molecule collection,
+      # the image's constraints above), the collections (copied out of the image),
+      # the git_cgallagher.molecule collection,
       # KVM + QEMU, and the lab directory on the runner's temp disk, exported as
       # MOLECULE_LAB_DIR: the box (~6 GB, plus ~6 GB while unpacking) and the VM
       # disk don't fit on the root filesystem.
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@ab9538db70ddb0786723d60da1f1f8fac8d0bcfc  # v0.4.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@fe241402b3ecf67a343b634d39a14086ef913a50  # v0.5.0
         with:
           collection: git_cgallagher.isc
-          # The image's collection pins, not this repo's ranges (the image's consumers check
-          # verifies the pins satisfy them).
-          requirements: .cache/collections.yml
+          # The collections come out of the image (every one but git_cgallagher.molecule, which
+          # the action installs from its own commit), never from Galaxy. requirements.yml's
+          # ranges then only check them (ansible-galaxy --offline).
+          collections-image: ${{ steps.runtime.outputs.image }}
+          requirements: requirements.yml
           constraints: .cache/constraints.txt
           kvm: 'true'
           lab-dir: /mnt/kea-lab
@@ -82,7 +81,7 @@ jobs:
       - name: Capture the VM screen
         if: failure()
         timeout-minutes: 2
-        uses: git-cgallagher/ansible-collection-molecule/.github/actions/vm-screendump@ab9538db70ddb0786723d60da1f1f8fac8d0bcfc  # v0.4.0
+        uses: git-cgallagher/ansible-collection-molecule/.github/actions/vm-screendump@fe241402b3ecf67a343b634d39a14086ef913a50  # v0.5.0
         with:
           lab-dir: ${{ env.MOLECULE_LAB_DIR }}
           platforms: dc01
