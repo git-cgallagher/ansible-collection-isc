@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.3 — 2026-11-02
+
+No role behaviour changes.
+
+- The manual `windows-dc` lab moves to molecule-git-cgallagher **v0.3.2**
+  (`setup-molecule` and `vm-screendump` pinned to `3cefe7f`). Its `quiet_vm`,
+  which `ad_forest` runs to prepare the domain controller, no longer fails
+  when Windows refuses to stop Windows Update right after first boot
+  ([ansible-collection-molecule#18](https://github.com/git-cgallagher/ansible-collection-molecule/issues/18)),
+  and waits out Windows Update Medic re-enabling the service.
+- The local install lines in `AGENTS.md` and the `kea_dhcp_msdns` Windows
+  scenario's README move to v0.3.2 (the README still said v0.2.1).
+
 ## 2.2.2 — 2026-11-01
 
 No role behaviour changes.
