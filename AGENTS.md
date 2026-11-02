@@ -54,8 +54,8 @@ Or install the tools yourself:
 export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
 docker run --rm "$RUNTIME_IMAGE" cat /usr/share/ansible-runtime/constraints.txt > /tmp/constraints.txt
 pip install -c /tmp/constraints.txt ansible-core ansible-lint yamllint molecule \
-  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.2.1"
-ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.2.1
+  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.3.1"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.3.1
 ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0
