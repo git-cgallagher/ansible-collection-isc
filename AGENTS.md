@@ -54,8 +54,8 @@ Or install the tools yourself:
 export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
 docker run --rm "$RUNTIME_IMAGE" cat /usr/share/ansible-runtime/constraints.txt > /tmp/constraints.txt
 pip install -c /tmp/constraints.txt ansible-core ansible-lint yamllint molecule \
-  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.4.0"
-ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.4.0
+  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.5.0"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.5.0
 ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0
@@ -220,7 +220,10 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
 - **Every tool version comes from `RUNTIME_IMAGE`** (ansible-runtime's shared dependency model,
   ansible-runtime#8, 2026-11-01). Jobs in the image use it directly; `windows-dc`, `argument-specs`
   (all but the ansible-core it varies) and `release.yml` read the image's
-  `/usr/share/ansible-runtime/constraints.txt` (and `collections.yml`) from that line. No file
+  `/usr/share/ansible-runtime/constraints.txt` (and `argument-specs` its `collections.yml`) from
+  that line. `windows-dc` copies its collections out of that image (setup-molecule's
+  `collections-image`, driver v0.5.0), so the lab downloads none from Galaxy, and
+  `requirements.yml` is only checked against them. No file
   here pins a version: `.github/ci/requirements.txt` and its Dependabot pip entry are gone. A
   new dependency is pinned in ansible-runtime first (its `consumers` job fails until then).
 - **History: every CI `pip install` used `.github/ci/requirements.txt` as constraints** (2026-10-31,
