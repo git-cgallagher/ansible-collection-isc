@@ -215,6 +215,24 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
     the `RUNTIME_IMAGE` image (`collections-image`), never downloaded from Galaxy, and
     `requirements.yml` is only checked against them offline. A collection or version the image
     lacks fails the step: pin it in ansible-runtime first.
+- **Some runners come up short of disk, and `/mnt` is no disk of its own.** On `ubuntu-latest`
+  (2026-11), `/mnt` is a directory on the root filesystem: usually `/dev/root`, 145 GB with about
+  85 GB free, but some runners come up with a 72 GB `/dev/mapper/cow-root` and 15.7 GB free
+  (actions/runner-images#15238). There the driver refuses to create the DC ("/mnt/kea-lab has
+  15.7 GB free; this run needs 20.0 GB") before it boots: the windows collection's `domain-lab`
+  lost random jobs to it (git-cgallagher/ansible-collection-windows#62). `windows-dc.yml`'s first
+  step, "Make room for the lab", is the same step as windows' `domain-lab.yml` (its PR #63) and the
+  driver repo's `windows-lab.yml`: it measures `/mnt` and, under 30 GB, deletes preinstalled
+  toolchains the lab never uses and moves the lab to `$HOME/kea-lab` through `$GITHUB_ENV`. Later
+  steps read the path from `${{ env.MOLECULE_LAB_DIR }}` (or `$MOLECULE_LAB_DIR`), so never write
+  `/mnt/kea-lab` into a step. "Show the lab's disk use" prints what the lab holds at the end: the
+  5.6 GB box plus dc01's 1-2 GB disk. Measured 2026-11-05 (runner image 20261101.360.1): a
+  `workflow_dispatch` run that first left the runner 15.7 GB free (run 42095388903) freed 25.2 GB
+  in 91 s (Android SDK 11.0, .NET 5.7, GHCup 3.7, Swift 3.5, CodeQL 1.3; `/opt/ghc` is gone),
+  moved the lab to `/home/runner/kea-lab` and passed, ending at 6.6 GB with 33 GB left. A normal
+  run (42095295980) had 85.8 GB free, kept `/mnt/kea-lab` and ended at 7.6 GB. A real `cow-root`
+  runner is provisioned differently (copy-on-write, going by the device name; unconfirmed), so
+  read the step's log the first time a run lands on one.
 - **Merge one PR at a time and wait for its release.** `release.yml` runs after the merge's CI, then
   tags and publishes that merge commit. If another PR merges first, GITHUB_TOKEN can't tag the older
   commit (its workflows differ from main's): `gh release create` fails with HTTP 403 "Resource not
