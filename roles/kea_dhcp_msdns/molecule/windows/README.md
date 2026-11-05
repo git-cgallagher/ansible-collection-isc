@@ -17,7 +17,7 @@ The VM comes from the `windows_vm` kind of the [`molecule-git-cgallagher`](https
 | idempotence | A second run changes nothing. In particular, the keytab isn't regenerated, because `ktpass` would bump the key version. |
 | verify, DC | The account's DN is `CN=kea,OU=Services,...`, its UPN equals Kea's client principal, the SPN and DnsUpdateProxy membership are set, and both zones are `Secure`. |
 | verify, Kea | `kinit` works with the deployed keytab and `krb5.conf`. |
-| verify, DNS | `lease4-add` plus `lease4-resend-ddns` produce GSS-TSIG signed updates. The **A and PTR records are read back from Microsoft DNS** with `Get-DnsServerResourceRecord`. A second address for the same client moves the A record. No `GSS_TSIG_VERIFY_FAILED` appears in the log. |
+| verify, DNS | `lease4-add` plus `lease4-resend-ddns` produce GSS-TSIG signed updates. The **A and PTR records are read back from Microsoft DNS** with `ansible.windows.win_dns_record_info` (ansible.windows 3.9.2 or later). A second address for the same client moves the A record. No `GSS_TSIG_VERIFY_FAILED` appears in the log. |
 
 ## Networking
 

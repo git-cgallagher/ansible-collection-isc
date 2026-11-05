@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.4 — 2026-11-05
+
+No role behaviour changes.
+
+- The manual `windows-dc` lab's verify reads the A and PTR records back from
+  Microsoft DNS with `ansible.windows.win_dns_record_info` instead of a
+  `win_powershell` script, with the same values and the same retries while
+  the DDNS updates land. The module ships in ansible.windows 3.9.2, the
+  version the lab gets from the ansible-runtime image (its docs say
+  `version_added: 3.10.0`). The role itself still needs only
+  `ansible.windows` >= 2.6.0.
+
 ## 2.2.3 — 2026-11-02
 
 No role behaviour changes.

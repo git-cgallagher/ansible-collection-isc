@@ -62,14 +62,6 @@
                  "hostname": name, "fqdn-fwd": True, "fqdn-rev": True, "valid-lft": 3600}})
       res = cmd({"command": "lease4-resend-ddns", "arguments": {"ip-address": ip}})
       print(add["result"], res["result"])
-    # Read on the DC: the records as Microsoft DNS stores them.
-    kea_win_dns_script: |
-      param($Zone, $Name, $Type)
-      $Ansible.Changed = $false
-      $r = Get-DnsServerResourceRecord -ZoneName $Zone -Name $Name -RRType $Type -ErrorAction SilentlyContinue
-      @($r | ForEach-Object {
-          if ($Type -eq 'A') { $_.RecordData.IPv4Address.IPAddressToString } else { $_.RecordData.PtrDomainName }
-      })
   tasks:
     - name: Get a ticket with the deployed keytab and Kea's krb5.conf
       ansible.builtin.command:
@@ -123,22 +115,27 @@
           changed_when: true
           failed_when: kea_win_first.stdout != '0 0'
 
+        # Read on the DC: the records as Microsoft DNS stores them (win_dns_record_info:
+        # ansible.windows 3.9.2, the image's pin). A failed read leaves no `records` and
+        # is retried, like a missing record.
         - name: The A record lands in Microsoft DNS
-          ansible.windows.win_powershell:
-            script: "{{ kea_win_dns_script }}"
-            parameters: {Zone: "{{ lab_domain }}", Name: client1, Type: A}
+          ansible.windows.win_dns_record_info:
+            zone: "{{ lab_domain }}"
+            name: client1
+            type: A
           register: kea_win_a1
-          until: kea_win_a1.output == [kea_win_ip1]
+          until: (kea_win_a1.records | default([]) | map(attribute='record_values') | flatten) == [kea_win_ip1]
           retries: 30
           delay: 3
           delegate_to: dc01
 
         - name: The PTR record lands in Microsoft DNS
-          ansible.windows.win_powershell:
-            script: "{{ kea_win_dns_script }}"
-            parameters: {Zone: "{{ lab_reverse_zone }}", Name: "{{ kea_win_ip1.split('.')[-1] }}", Type: PTR}
+          ansible.windows.win_dns_record_info:
+            zone: "{{ lab_reverse_zone }}"
+            name: "{{ kea_win_ip1.split('.')[-1] }}"
+            type: PTR
           register: kea_win_ptr1
-          until: kea_win_ptr1.output == [kea_win_fqdn ~ '.']
+          until: (kea_win_ptr1.records | default([]) | map(attribute='record_values') | flatten) == [kea_win_fqdn ~ '.']
           retries: 30
           delay: 3
           delegate_to: dc01
@@ -153,11 +150,12 @@
           failed_when: kea_win_second.stdout != '0 0'
 
         - name: The A record follows the client to its new address
-          ansible.windows.win_powershell:
-            script: "{{ kea_win_dns_script }}"
-            parameters: {Zone: "{{ lab_domain }}", Name: client1, Type: A}
+          ansible.windows.win_dns_record_info:
+            zone: "{{ lab_domain }}"
+            name: client1
+            type: A
           register: kea_win_a2
-          until: kea_win_a2.output == [kea_win_ip2]
+          until: (kea_win_a2.records | default([]) | map(attribute='record_values') | flatten) == [kea_win_ip2]
           retries: 30
           delay: 3
           delegate_to: dc01
