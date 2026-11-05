@@ -30,6 +30,12 @@ env:
   ANSIBLE_FORCE_COLOR: '1'
   # Stream Ansible's output instead of buffering it until the play ends.
   PYTHONUNBUFFERED: '1'
+  # The driver keeps the box (~6 GB, plus ~6 GB while unpacking) and the VM
+  # disk here; a failed run's screen capture and Kea log go here too. On
+  # ubuntu-latest /mnt is a directory on the root filesystem, not a disk of its
+  # own. The "Make room for the lab" step moves the lab when /mnt is short of
+  # room.
+  MOLECULE_LAB_DIR: /mnt/kea-lab
 
 jobs:
   molecule:
@@ -40,6 +46,46 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+
+      # The driver refuses to create a VM with under 20 GB free in the lab
+      # directory (its windows_vm create.yml, measured with df -Pk, as here).
+      # Most runners have about 85 GB free on / (145 GB, /dev/root), but some
+      # come up with a 72 GB root (/dev/mapper/cow-root) and about 16 GB free
+      # (git-cgallagher/ansible-collection-windows#62,
+      # actions/runner-images#15238). Then this step deletes big preinstalled
+      # toolchains the lab never uses and moves the lab to a directory on /:
+      # the same disk as /mnt today, the right one if /mnt is ever a small disk
+      # of its own. The later steps read the new path from
+      # ${{ env.MOLECULE_LAB_DIR }}. NEED_GB leaves margin over the driver's
+      # 20 GB, part of which the image pull, apt and pip below use.
+      - name: Make room for the lab
+        timeout-minutes: 10
+        env:
+          NEED_GB: '30'
+        run: |
+          avail_kb() { df -Pk "$1" | awk 'NR == 2 {print $4}'; }
+          gb() { awk -v kb="$1" 'BEGIN {printf "%.1f", kb / 1048576}'; }
+          need_kb=$((NEED_GB * 1048576))
+          lab=$MOLECULE_LAB_DIR
+          df -h / /mnt
+          if [ "$(avail_kb /mnt)" -lt "$need_kb" ]; then
+            echo "/mnt has $(gb "$(avail_kb /mnt)") GB free, under $NEED_GB GB. Deleting from /:"
+            for dir in /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                       /opt/hostedtoolcache/CodeQL /usr/share/swift; do
+              [ -e "$dir" ] || continue
+              before=$(avail_kb /)
+              sudo rm -rf "$dir"
+              echo "  $dir ($(gb $(($(avail_kb /) - before))) GB)"
+            done
+            lab=$HOME/kea-lab
+            echo "MOLECULE_LAB_DIR=$lab" >> "$GITHUB_ENV"
+          fi
+          # The lab directory doesn't exist yet (setup-molecule creates it).
+          free_kb=$(avail_kb "$(dirname "$lab")")
+          echo "Lab directory: $lab, on $(df -P "$(dirname "$lab")" | awk 'NR == 2 {print $1}'), $(gb "$free_kb") GB free"
+          if [ "$free_kb" -lt "$need_kb" ]; then
+            echo "::warning::Only $(gb "$free_kb") GB free for the lab ($lab); it may run out of room. Re-run the job if it does."
+          fi
 
       # Python packages and collections at the versions of the ansible-runtime image ansible-test.yml pins
       # (its constraints.txt; ansible-runtime's shared dependency model). .cache/ is gitignored.
@@ -56,9 +102,7 @@ jobs:
       # Ansible, Molecule and the molecule-git-cgallagher driver (versions from
       # the image's constraints above), the collections (copied out of the image),
       # the git_cgallagher.molecule collection,
-      # KVM + QEMU, and the lab directory on the runner's temp disk, exported as
-      # MOLECULE_LAB_DIR: the box (~6 GB, plus ~6 GB while unpacking) and the VM
-      # disk don't fit on the root filesystem.
+      # KVM + QEMU, and the lab directory (MOLECULE_LAB_DIR, see above).
       - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@fe241402b3ecf67a343b634d39a14086ef913a50  # v0.5.0
         with:
           collection: git_cgallagher.isc
@@ -69,7 +113,7 @@ jobs:
           requirements: requirements.yml
           constraints: .cache/constraints.txt
           kvm: 'true'
-          lab-dir: /mnt/kea-lab
+          lab-dir: ${{ env.MOLECULE_LAB_DIR }}
 
       # --destroy=never keeps the VM for the diagnostics below; the last step
       # destroys it either way. A hang must become a failure so they run.
@@ -77,6 +121,17 @@ jobs:
         timeout-minutes: 85
         working-directory: roles/kea_dhcp_msdns
         run: molecule test -s windows --destroy=never
+
+      # What the lab used (the box image, the VM's copy-on-write disk) and the
+      # room left, before destroy deletes the VM disk. QEMU pauses a VM whose
+      # disk runs out of room: the screen capture below then reports
+      # "VM status: paused (io-error)".
+      - name: Show the lab's disk use
+        if: always()
+        timeout-minutes: 2
+        run: |
+          du -sch "$MOLECULE_LAB_DIR"/* || true
+          df -h "$MOLECULE_LAB_DIR" || true
 
       - name: Capture the VM screen
         if: failure()
