@@ -105,7 +105,7 @@ jobs:
       # the image's constraints above), the collections (copied out of the image),
       # the git_cgallagher.molecule collection,
       # KVM + QEMU, and the lab directory (MOLECULE_LAB_DIR, see above).
-      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@fe241402b3ecf67a343b634d39a14086ef913a50  # v0.5.0
+      - uses: git-cgallagher/ansible-collection-molecule/.github/actions/setup-molecule@728a9fe0165e4e407d04557678e2cb0f0b9ff422  # v0.5.1
         with:
           collection: git_cgallagher.isc
           # The collections come out of the image (every one but git_cgallagher.molecule, which
@@ -138,7 +138,7 @@ jobs:
       - name: Capture the VM screen
         if: failure()
         timeout-minutes: 2
-        uses: git-cgallagher/ansible-collection-molecule/.github/actions/vm-screendump@fe241402b3ecf67a343b634d39a14086ef913a50  # v0.5.0
+        uses: git-cgallagher/ansible-collection-molecule/.github/actions/vm-screendump@728a9fe0165e4e407d04557678e2cb0f0b9ff422  # v0.5.1
         with:
           lab-dir: ${{ env.MOLECULE_LAB_DIR }}
           platforms: dc01

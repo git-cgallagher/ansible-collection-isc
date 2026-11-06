@@ -54,8 +54,8 @@ Or install the tools yourself:
 export RUNTIME_IMAGE=$(sed -n 's/^ *RUNTIME_IMAGE: //p' .github/workflows/ansible-test.yml)
 docker run --rm "$RUNTIME_IMAGE" cat /usr/share/ansible-runtime/constraints.txt > /tmp/constraints.txt
 pip install -c /tmp/constraints.txt ansible-core ansible-lint yamllint molecule \
-  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.5.0"
-ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.5.0
+  "molecule-git-cgallagher[windows] @ git+https://github.com/git-cgallagher/ansible-collection-molecule@v0.5.1"
+ansible-galaxy collection install git+https://github.com/git-cgallagher/ansible-collection-molecule.git,v0.5.1
 ansible-galaxy collection install -r requirements.yml -p ./collections
 mkdir -p .molecule-collections/ansible_collections/git_cgallagher && ln -sfn ../../.. .molecule-collections/ansible_collections/git_cgallagher/isc
 ansible-lint && yamllint .          # production profile, must stay at 0
@@ -214,7 +214,10 @@ git_cgallagher.isc 1.0.0 was published this way on 2026-10-27.
     the runner itself. Since setup-molecule v0.5.0 (2026-11-02) its collections are copied out of
     the `RUNTIME_IMAGE` image (`collections-image`), never downloaded from Galaxy, and
     `requirements.yml` is only checked against them offline. A collection or version the image
-    lacks fails the step: pin it in ansible-runtime first.
+    lacks fails the step: pin it in ansible-runtime first. Since v0.5.1 (2026-11-06) it takes
+    QEMU's `.deb`s from the actions cache when it can, and an update or download too slow for its
+    limit gets one more try without the first Ubuntu mirror (10 minutes of apt at most): westus2's
+    Azure mirror sent them at 40 kB/s on 2026-11-05.
 - **Some runners come up short of disk, and `/mnt` is no disk of its own.** On `ubuntu-latest`
   (2026-11), `/mnt` is a directory on the root filesystem: usually `/dev/root`, 145 GB with about
   85 GB free, but some runners come up with a 72 GB `/dev/mapper/cow-root` and 15.7 GB free
