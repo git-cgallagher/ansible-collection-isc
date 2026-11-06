@@ -26,7 +26,7 @@ permissions:
 env:
   PY_COLORS: '1'
   ANSIBLE_FORCE_COLOR: '1'
-  RUNTIME_IMAGE: ghcr.io/git-cgallagher/ansible-runtime:1.2.0-ci@sha256:209b64e17a4e550eb90970f1473b2c4de7b1001a3c04c9f1d57742f7b847cae7
+  RUNTIME_IMAGE: ghcr.io/git-cgallagher/ansible-runtime:1.4.0-ci@sha256:317d54cc761728def24cb28e4b150954a3816c2bb0091ccdc03add25150335c8
 
 # Every job sets timeout-minutes: GitHub's default is 6 hours, and a stalled
 # install or image pull would hold the runner that long. Each limit is several
